@@ -7,5 +7,5 @@ google-genai
 pandas
 numpy
 feedparser
-
+fpdf
 
