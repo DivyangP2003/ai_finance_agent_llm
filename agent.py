@@ -374,6 +374,138 @@ def sharpe_ratio(returns, risk_free_rate=0.0):
         return np.nan
     return (mean - risk_free_rate) / std
 
+# --------------------------- Advanced Quantitative Analytics --------------------------- #
+def compute_alpha_tracking_error(port_returns: pd.Series, bench_returns: pd.Series, risk_free_rate=0.0) -> Dict[str, float]:
+    merged = pd.concat([port_returns, bench_returns], axis=1).dropna()
+    if merged.shape[0] < 2:
+        return {"beta": np.nan, "alpha_annual": np.nan, "tracking_error_annual": np.nan}
+    y = merged.iloc[:, 0].values  # portfolio
+    x = merged.iloc[:, 1].values  # benchmark
+    X = sm.add_constant(x)
+    model = sm.OLS(y, X).fit()
+    alpha_daily = model.params[0]
+    beta = model.params[1]
+    mean_p = port_returns.mean() * 252
+    mean_b = bench_returns.mean() * 252
+    alpha_annual = (mean_p - risk_free_rate) - beta * (mean_b - risk_free_rate)
+    tracking_err_annual = ((port_returns - bench_returns).std() * np.sqrt(252))
+    return {"beta": float(beta), "alpha_annual": float(alpha_annual), "tracking_error_annual": float(tracking_err_annual)}
+
+def drawdown_series(price: pd.Series) -> pd.DataFrame:
+    price = price.dropna()
+    peak = price.cummax()
+    drawdown = (price - peak) / peak
+    return pd.DataFrame({"price": price, "peak": peak, "drawdown": drawdown})
+
+def plot_drawdown(price: pd.Series, title="Drawdown Chart"):
+    dd = drawdown_series(price)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=dd.index, y=dd["price"], name="Price", yaxis="y1", mode="lines"))
+    fig.add_trace(go.Scatter(x=dd.index, y=dd["drawdown"], name="Drawdown", yaxis="y2", fill="tozeroy", mode="lines"))
+    fig.update_layout(
+        title=title,
+        xaxis=dict(domain=[0,1]),
+        yaxis=dict(title="Price", side="left"),
+        yaxis2=dict(title="Drawdown", overlaying="y", side="right", tickformat=".0%", range=[dd["drawdown"].min()*1.1, 0]),
+        legend=dict(orientation="h")
+    )
+    return fig
+
+def compute_sector_exposure(symbols: list, weights: Dict[str, float] = None) -> Dict[str, float]:
+    sector_weights = {}
+    if not symbols:
+        return sector_weights
+    if weights is None:
+        weights = {s: 1.0/len(symbols) for s in symbols}
+    for s in symbols:
+        try:
+            info = fetch_ticker_info(s)
+            sector = info.get("sector") or info.get("industry") or "Unknown"
+        except Exception:
+            sector = "Unknown"
+        sector_weights[sector] = sector_weights.get(sector, 0.0) + weights.get(s, 0.0)
+    return sector_weights
+
+def rolling_beta(asset_returns: pd.Series, benchmark_returns: pd.Series, window=63) -> pd.Series:
+    merged = pd.concat([asset_returns, benchmark_returns], axis=1).dropna()
+    if merged.empty:
+        return pd.Series(dtype=float)
+    # rolling apply on arrays: compute cov(asset,bench)/var(bench)
+    def rb(window_vals):
+        a = window_vals[:,0]
+        b = window_vals[:,1]
+        cov = np.cov(a, b, ddof=1)[0,1]
+        varb = np.var(b, ddof=1)
+        return cov / varb if varb != 0 else np.nan
+    out = merged.rolling(window).apply(lambda x: rb(x), raw=True)
+    # result is DataFrame: we want the first column's values
+    return out.iloc[:,0].rename("rolling_beta")
+
+def expected_shortfall(returns: pd.Series, alpha=0.05):
+    r = returns.dropna()
+    if r.empty:
+        return np.nan
+    var = np.quantile(r, alpha)
+    tail = r[r <= var]
+    if tail.empty:
+        return float(var)
+    return float(tail.mean())
+
+def stress_test_shock(symbols: list, returns_df: pd.DataFrame, benchmark_returns: pd.Series, shock_pct: float, betas: dict = None):
+    results = {}
+    if betas is None:
+        betas = {}
+    for s in returns_df.columns:
+        b = betas.get(s, np.nan)
+        if not np.isnan(b):
+            est = b * shock_pct
+        else:
+            corr = returns_df[s].corr(benchmark_returns) if not benchmark_returns.empty else np.nan
+            est = corr * shock_pct if not pd.isna(corr) else np.nan
+        results[s] = float(est) if not pd.isna(est) else np.nan
+    return results
+
+def stress_test_historical_analogs(symbols: list, close_df: pd.DataFrame, bench_prices: pd.Series, window=30, top_n=3):
+    if bench_prices is None or bench_prices.empty or close_df.empty:
+        return []
+    bench = bench_prices.dropna()
+    # compute rolling window cumulative change (percent) ending at each index
+    pct_change = bench.pct_change(periods=window).dropna()
+    candidates = pct_change.nsmallest(top_n)
+    scenarios = []
+    bench_idx = bench.index
+    for end_idx, drop in candidates.items():
+        try:
+            end_loc = bench_idx.get_loc(end_idx)
+            start_loc = max(0, end_loc - window)
+            start = bench_idx[start_loc]
+            end = end_idx
+            asset_drop = {}
+            for s in close_df.columns:
+                try:
+                    series = close_df[s].loc[start:end]
+                    cum = (series.iloc[-1] / series.iloc[0] - 1.0) if len(series) > 1 else np.nan
+                    asset_drop[s] = float(cum) if not pd.isna(cum) else np.nan
+                except Exception:
+                    asset_drop[s] = np.nan
+            scenarios.append({"start": start, "end": end, "bench_drop": float(drop), "asset_drops": asset_drop})
+        except Exception:
+            continue
+    return scenarios
+
+def sortino_ratio(returns: pd.Series, risk_free_rate=0.0, target=0.0):
+    r = returns.dropna()
+    if r.empty:
+        return np.nan
+    excess = r - target
+    mean_ann = excess.mean() * 252
+    downside = r[r < target]
+    if downside.empty:
+        return np.nan
+    downside_dev = np.sqrt((downside**2).mean()) * np.sqrt(252)
+    if downside_dev == 0:
+        return np.nan
+    return float(mean_ann / downside_dev)
 # --------------------------- Multi-Agent Definitions --------------------------- #
 def create_agents():
     agents = {}
@@ -1281,6 +1413,95 @@ with tabs[3]:
             fig_vol.add_trace(go.Scatter(x=vol.index, y=vol[c], mode="lines", name=c))
         fig_vol.update_layout(template="plotly_white")
         st.plotly_chart(fig_vol, use_container_width=True, key=f"rolling_vol_{'_'.join(symbols)}")  # ✅ FIXED
+        # --- Advanced Quant Analytics Controls ---
+        st.markdown("---")
+        st.subheader("🧮 Advanced Quantitative Analytics")
+
+        do_alpha = st.checkbox("Compute Alpha & Tracking Error (vs benchmark)", value=True)
+        do_drawdown = st.checkbox("Show Drawdown Visualization", value=True)
+        do_rolling_beta = st.checkbox("Show Rolling Beta (63d)", value=False)
+        do_sector = st.checkbox("Compute Sector Exposure (yfinance info)", value=False)
+        do_stress = st.checkbox("Run Stress Test (shock or historical analogs)", value=False)
+        do_tail = st.checkbox("Expected Shortfall (CVaR) & Sortino", value=True)
+
+        # Prepare benchmark returns if available
+        bench_prices = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
+        bench_returns = compute_returns(bench_prices).iloc[:, 0] if not bench_prices.empty else pd.Series(dtype=float)
+
+        # Portfolio-level metrics (equal-weight)
+        if not returns.empty:
+            # portfolio equal-weight returns
+            port_returns = returns.mean(axis=1)
+
+            if do_alpha and not bench_returns.empty:
+                alpha_res = compute_alpha_tracking_error(port_returns, bench_returns)
+                st.markdown("**Alpha & Tracking Error (portfolio vs benchmark)**")
+                st.write({
+                    "Beta (OLS)": alpha_res["beta"],
+                    "Alpha (annualized)": f"{alpha_res['alpha_annual']:.2%}" if not np.isnan(alpha_res["alpha_annual"]) else np.nan,
+                    "Tracking Error (annualized)": f"{alpha_res['tracking_error_annual']:.2%}" if not np.isnan(alpha_res["tracking_error_annual"]) else np.nan
+                })
+
+            if do_drawdown:
+                st.markdown("**Drawdown Visualization (each asset)**")
+                # show drawdown plot for each asset in an expander to prevent UI overload
+                for c in close_df_risk.columns:
+                    with st.expander(f"{c} drawdown"):
+                        fig_dd = plot_drawdown(close_df_risk[c], title=f"{c} - Price & Drawdown")
+                        st.plotly_chart(fig_dd, use_container_width=True)
+
+            if do_rolling_beta and not bench_returns.empty:
+                st.markdown("**Rolling Beta (63-day)**")
+                for c in returns.columns:
+                    rb = rolling_beta(returns[c], bench_returns, window=63)
+                    if not rb.empty:
+                        fig_rb = go.Figure()
+                        fig_rb.add_trace(go.Scatter(x=rb.index, y=rb.values, mode="lines", name=f"{c} rolling beta"))
+                        fig_rb.update_layout(template="plotly_white", height=350)
+                        st.plotly_chart(fig_rb, use_container_width=True)
+
+            if do_sector:
+                st.markdown("**Sector Exposure (approx via yfinance metadata)**")
+                # equal weight by default
+                weights = {s: 1/len(symbols) for s in symbols} if symbols else {}
+                sector_exp = compute_sector_exposure(symbols, weights=weights)
+                st.table(pd.DataFrame.from_dict(sector_exp, orient="index", columns=["Weight"]).sort_values("Weight", ascending=False))
+
+            if do_stress:
+                st.markdown("**Stress Test**")
+                shock_pct = st.number_input("Shock percent on benchmark (e.g., -10 for -10%)", value=-10.0, format="%.2f")
+                shock_pct /= 100.0
+                # compute betas for assets
+                betas = {}
+                if not bench_returns.empty:
+                    for s in returns.columns:
+                        betas[s] = compute_beta(returns[s], bench_returns)
+                shock_res = stress_test_shock(returns.columns.tolist(), returns, bench_returns, shock_pct, betas)
+                st.write("Estimated immediate P&L % (approx):")
+                st.table(pd.DataFrame.from_dict(shock_res, orient="index", columns=["Est P&L"]).applymap(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A"))
+
+                st.markdown("**Historical analog scenarios**")
+                scenarios = stress_test_historical_analogs(symbols, close_df_risk, bench_prices.iloc[:,0] if not bench_prices.empty else pd.Series(), window=30, top_n=3)
+                if scenarios:
+                    for scen in scenarios:
+                        st.markdown(f"- **Window**: {scen['start'].date()} → {scen['end'].date()}, Benchmark drop: {scen['bench_drop']:.2%}")
+                        st.table(pd.DataFrame.from_dict(scen["asset_drops"], orient="index", columns=["Cumulative Return"]).applymap(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A"))
+                else:
+                    st.info("No historical analog scenarios available (benchmark data not found).")
+
+            if do_tail:
+                st.markdown("**Tail Risk: CVaR & Sortino**")
+                alpha_level = st.slider("CVaR alpha", 0.01, 0.10, 0.05, step=0.01)
+                # compute for each asset and portfolio
+                es_table = {}
+                for c in returns.columns:
+                    es = expected_shortfall(returns[c], alpha=alpha_level)
+                    sd = sortino_ratio(returns[c])
+                    es_table[c] = {"CVaR": es, "Sortino": sd}
+                df_es = pd.DataFrame(es_table).T
+                df_es["CVaR_pct"] = df_es["CVaR"].apply(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A")
+                df_es["Sortino"] = df_es["Sortino"].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "N/A")
+                st.table(df_es[["CVaR_pct","Sortino"]])
 
 # --- Portfolio Strategist Tab ---
 with tabs[4]:
