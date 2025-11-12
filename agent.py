@@ -12,6 +12,8 @@ import feedparser
 # --- AI agent imports ---
 from agno.agent import Agent
 from agno.models.google import Gemini
+from fpdf import FPDF
+
 
 # --------------------------- Setup --------------------------- #
 load_dotenv()
@@ -637,20 +639,60 @@ with tabs[4]:
                             st.markdown(text)
 
 # --- Audit & Exports Tab ---
+# --- Audit & Exports Tab ---
 with tabs[5]:
     st.header("Audit Trail & Report Generation")
-    st.markdown("Run individual agents and then request an integrated report from TeamLeadAgent.")
+    st.markdown("Run all agents together, integrate results, and generate a benchmark-aware TeamLead report.")
+
     if st.button("Run full multi-agent orchestration and generate TeamLead report"):
-        with st.spinner("Running agents and compiling report..."):
+        with st.spinner("Running all agents and compiling final report..."):
+            # Download full-year close data
             close_for_run = download_close_prices(symbols, period="1y")
             date_str = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+
+            # --- Run sub-agents with benchmark awareness ---
             market_analysis = run_market_agent(symbols, close_for_run, benchmark=benchmark)
             company_analyses = {s: run_company_agent(s) for s in symbols}
             sentiment_analyses = {s: run_sentiment_agent(s) for s in symbols}
             risk_analysis = run_risk_agent(symbols, close_for_run, benchmark=benchmark)
-            portfolio_recommendation = run_portfolio_agent(symbols, close_for_run)
-            final_report = run_teamlead_agent(date_str, market_analysis, company_analyses, sentiment_analyses, risk_analysis, portfolio_recommendation)
-            st.markdown("### TeamLead Consolidated Report")
-            st.markdown(final_report)
+            portfolio_recommendation = run_portfolio_agent(symbols, close_for_run, benchmark=benchmark)
+
+            # --- Generate benchmark-aware final report ---
+            final_report = run_teamlead_agent(
+                date_str=date_str,
+                market_analysis=market_analysis,
+                company_analyses=company_analyses,
+                sentiment_analyses=sentiment_analyses,
+                risk_analysis=risk_analysis,
+                portfolio_recommendation=portfolio_recommendation,
+                benchmark=benchmark
+            )
+
+            # --- Export Options ---
+
+        if st.button("📄 Export as PDF"):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            for line in final_report.splitlines():
+                pdf.multi_cell(0, 8, line)
+            pdf_output = pdf.output(dest="S").encode("latin1")
+            st.download_button(
+                label="⬇️ Download PDF",
+                data=pdf_output,
+                file_name=report_filename.replace(".md", ".pdf"),
+                mime="application/pdf"
+            )
+
+            st.download_button(
+                label="💾 Download as Markdown",
+                data=final_report,
+                file_name=report_filename,
+                mime="text/markdown"
+            )
+
+           
 
     st.markdown("---")
+
+
