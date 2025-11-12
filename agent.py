@@ -21,6 +21,98 @@ api_key_env = os.getenv("GOOGLE_API_KEY", "")
 
 st.set_page_config(page_title="AI Market Intelligence (Multi-Agent)", page_icon="📊", layout="wide")
 
+# --------------------------- 🌍 Global Region Selection --------------------------- #
+
+st.sidebar.header("🌍 Market Region Configuration")
+
+# Country and benchmark mapping
+region_config = {
+    "United States": {
+        "benchmarks": {
+            "^GSPC": "S&P 500 (Broad US Market)",
+            "^DJI": "Dow Jones Industrial Average",
+            "^NDX": "Nasdaq 100 (Tech-heavy)",
+            "^RUT": "Russell 2000 (Small Caps)"
+        },
+        "currency": "USD",
+        "rss_region": "US",
+        "rss_lang": "en-US"
+    },
+    "United Kingdom": {
+        "benchmarks": {
+            "^FTSE": "FTSE 100 (UK Large Caps)",
+            "^FTMC": "FTSE 250 (Mid Caps)"
+        },
+        "currency": "GBP",
+        "rss_region": "GB",
+        "rss_lang": "en-GB"
+    },
+    "Europe": {
+        "benchmarks": {
+            "^STOXX50E": "Euro Stoxx 50",
+            "^DAX": "German DAX 40",
+            "^CAC": "French CAC 40"
+        },
+        "currency": "EUR",
+        "rss_region": "EU",
+        "rss_lang": "en-EU"
+    },
+    "India": {
+        "benchmarks": {
+            "^NSEI": "Nifty 50",
+            "^BSESN": "Sensex 30"
+        },
+        "currency": "INR",
+        "rss_region": "IN",
+        "rss_lang": "en-IN"
+    },
+    "Japan": {
+        "benchmarks": {
+            "^N225": "Nikkei 225",
+            "^TOPX": "TOPIX Index"
+        },
+        "currency": "JPY",
+        "rss_region": "JP",
+        "rss_lang": "ja-JP"
+    },
+    "Hong Kong": {
+        "benchmarks": {
+            "^HSI": "Hang Seng Index"
+        },
+        "currency": "HKD",
+        "rss_region": "HK",
+        "rss_lang": "zh-HK"
+    },
+    "Australia": {
+        "benchmarks": {
+            "^AXJO": "ASX 200"
+        },
+        "currency": "AUD",
+        "rss_region": "AU",
+        "rss_lang": "en-AU"
+    }
+}
+
+# Country selection
+selected_country = st.sidebar.selectbox("🌐 Select Country / Market Region", list(region_config.keys()), index=0)
+
+# Benchmark options depend on country
+available_benchmarks = region_config[selected_country]["benchmarks"]
+benchmark = st.sidebar.selectbox("🏦 Select Benchmark Index", list(available_benchmarks.keys()), index=0)
+benchmark_name = available_benchmarks[benchmark]
+
+# Symbol input
+input_symbols = st.sidebar.text_input(
+    f"Enter Stock Symbols for {selected_country} (comma-separated)",
+    "AAPL, TSLA, GOOG" if selected_country == "United States" else ""
+)
+
+# Fetch localized info
+rss_region = region_config[selected_country]["rss_region"]
+rss_lang = region_config[selected_country]["rss_lang"]
+currency = region_config[selected_country]["currency"]
+
+
 # --------------------------- Helper: caching --------------------------- #
 @st.cache_data(ttl=60 * 15)
 def download_close_prices(symbols, period="1y"):
@@ -48,7 +140,7 @@ def fetch_news(symbol, limit=10):
     Works even if yfinance's .news endpoint is broken.
     """
     try:
-        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region={rss_region}&lang={rss_lang}"
         feed = feedparser.parse(url)
         processed = []
         for entry in feed.entries[:limit]:
