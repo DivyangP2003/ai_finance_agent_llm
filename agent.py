@@ -9,7 +9,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-# --- AI agent imports (same as your original) ---
+# --- AI agent imports ---
 from agno.agent import Agent
 from agno.models.google import Gemini
 
@@ -26,7 +26,6 @@ def download_close_prices(symbols, period="1y"):
     if not symbols:
         return pd.DataFrame()
     df = yf.download(symbols, period=period, progress=False)["Close"]
-    # If single symbol, convert to DataFrame with column name
     if isinstance(df, pd.Series):
         df = df.to_frame(df.name)
     return df
@@ -47,7 +46,6 @@ def fetch_news(symbol, limit=10):
         news = t.news[:limit]
     except Exception:
         news = []
-    # convert to simple list of dicts
     processed = []
     for n in news:
         processed.append({
@@ -65,13 +63,11 @@ def rolling_volatility(returns, window=21):
     return returns.rolling(window).std() * np.sqrt(252)
 
 def max_drawdown(series):
-    # series: price series (pd.Series)
     roll_max = series.cummax()
     drawdown = (series - roll_max) / roll_max
     return drawdown.min()
 
 def historical_var(returns, alpha=0.05, window=None):
-    # returns: series of returns
     if window:
         tails = returns.rolling(window).apply(lambda x: np.quantile(x, alpha))
         return tails
@@ -79,7 +75,6 @@ def historical_var(returns, alpha=0.05, window=None):
         return np.quantile(returns.dropna(), alpha)
 
 def compute_beta(asset_returns, benchmark_returns):
-    # simple linear regression beta
     merged = pd.concat([asset_returns, benchmark_returns], axis=1).dropna()
     if merged.shape[0] < 2:
         return np.nan
@@ -92,7 +87,6 @@ def compute_beta(asset_returns, benchmark_returns):
     return np.nan
 
 def sharpe_ratio(returns, risk_free_rate=0.0):
-    # annualized Sharpe
     mean = returns.mean() * 252
     std = returns.std() * np.sqrt(252)
     if std == 0:
@@ -100,9 +94,7 @@ def sharpe_ratio(returns, risk_free_rate=0.0):
     return (mean - risk_free_rate) / std
 
 # --------------------------- Multi-Agent Definitions --------------------------- #
-# Create specialized agents with clear instructions and XAI requirements.
 def create_agents():
-    # All agents asked to return structured markdown with explicit Rationale & Recommendation sections
     agents = {}
 
     agents["MarketAnalystAgent"] = Agent(
@@ -363,7 +355,7 @@ def interpret_user_query(query, symbols, close_df):
 st.title("📊 AI Market Intelligence — Multi-Agent Decision Framework")
 st.markdown("Target audience: researchers, traders, asset managers, and risk managers.")
 
-# Sidebar: configuration
+# Sidebar
 st.sidebar.header("⚙️ Configuration")
 input_symbols = st.sidebar.text_input("Enter Stock Symbols (comma-separated)", "AAPL, TSLA, GOOG")
 api_key = st.sidebar.text_input("Enter your Google API Key (optional)", type="password")
@@ -376,7 +368,6 @@ if api_key:
 elif api_key_env:
     os.environ["GOOGLE_API_KEY"] = api_key_env
 
-# Tabs for professional UX
 tabs = st.tabs(["Overview", "Company Deep Dives", "Risk & Correlation", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
 
 # --- Overview Tab ---
@@ -392,9 +383,8 @@ with tabs[0]:
         for s in close_df.columns:
             fig.add_trace(go.Scatter(x=close_df.index, y=close_df[s], mode="lines", name=s))
         fig.update_layout(title=f"Price history ({period})", xaxis_title="Date", yaxis_title="Price", template="plotly_white")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"price_chart_{period}_{'_'.join(symbols)}")  # ✅ FIXED
 
-        # Run MarketAnalystAgent (cached indirectly by agent service)
         if st.button("Run MarketAnalystAgent"):
             with st.spinner("Running MarketAnalystAgent..."):
                 market_analysis_text = run_market_agent(symbols, close_df, benchmark=benchmark)
@@ -417,7 +407,6 @@ with tabs[1]:
                 with st.spinner(f"Running SentimentAgent for {s}..."):
                     sentiment_text = run_sentiment_agent(s)
                     st.markdown(sentiment_text)
-            # show latest headlines
             news = fetch_news(s, limit=6)
             if news:
                 st.markdown("**Latest headlines:**")
@@ -437,29 +426,23 @@ with tabs[2]:
                 st.markdown("### Risk Analysis (XAI)")
                 st.markdown(risk_text)
 
-        # Correlation heatmap
         returns = compute_returns(close_df_risk)
         if not returns.empty:
             corr = returns.corr()
             st.subheader("Return Correlation Heatmap (1y)")
             fig_corr = go.Figure(data=go.Heatmap(
-                z=corr.values,
-                x=corr.columns,
-                y=corr.index,
-                zmin=-1, zmax=1,
-                colorbar=dict(title="Corr")
+                z=corr.values, x=corr.columns, y=corr.index, zmin=-1, zmax=1, colorbar=dict(title="Corr")
             ))
             fig_corr.update_layout(height=450, template="plotly_white")
-            st.plotly_chart(fig_corr, use_container_width=True)
+            st.plotly_chart(fig_corr, use_container_width=True, key=f"corr_heatmap_{'_'.join(symbols)}")  # ✅ FIXED
 
-        # Rolling volatility plot
         vol = rolling_volatility(returns)
         st.subheader("Rolling Volatility (21-day annualized)")
         fig_vol = go.Figure()
         for c in vol.columns:
             fig_vol.add_trace(go.Scatter(x=vol.index, y=vol[c], mode="lines", name=c))
         fig_vol.update_layout(template="plotly_white")
-        st.plotly_chart(fig_vol, use_container_width=True)
+        st.plotly_chart(fig_vol, use_container_width=True, key=f"rolling_vol_{'_'.join(symbols)}")  # ✅ FIXED
 
 # --- Portfolio Strategist Tab ---
 with tabs[3]:
@@ -487,7 +470,6 @@ with tabs[4]:
             text_out, meta = interpret_user_query(user_query, symbols, close_df_chat)
             st.subheader("Assistant Response")
             st.markdown(text_out)
-            # show visuals if present
             if isinstance(meta, dict):
                 if meta.get("type") == "rolling_vol" and "data" in meta:
                     vol_df = meta["data"]
@@ -496,7 +478,7 @@ with tabs[4]:
                     for c in vol_df.columns:
                         fig_rv.add_trace(go.Scatter(x=vol_df.index, y=vol_df[c], mode="lines", name=c))
                     fig_rv.update_layout(template="plotly_white")
-                    st.plotly_chart(fig_rv, use_container_width=True)
+                    st.plotly_chart(fig_rv, use_container_width=True, key=f"chat_vol_{'_'.join(symbols)}")  # ✅ FIXED
                 elif meta.get("type") == "sharpe":
                     st.metric("Estimated portfolio Sharpe (annualized)", f"{meta['value']:.3f}")
                 elif meta.get("type") == "sentiments":
@@ -525,10 +507,8 @@ with tabs[5]:
     st.markdown("---")
     st.markdown("**Notes & Limitations**")
     st.markdown("""
-    - Agents are asked to include explicit `Rationale:` and `Recommendation:` sections for XAI/auditability.\n
-    - For production, you should add immutable audit logging (store agent prompts, responses, timestamps) and use consistent model versioning.\n
-    - Sentiment currently uses headlines fetched from yfinance and the SentimentAgent (Gemini) to synthesize tone. Replace or augment with a specialized feed (e.g., RavenPack, Bloomberg, LexisNexis) for institutional needs.\n
-    - Portfolio optimization currently shows candidate allocations. Integrate PyPortfolioOpt / Black-Litterman for real constrained optimization and backtesting.\n
+    - Agents include explicit `Rationale:` and `Recommendation:` for XAI/auditability.\n
+    - For production, add immutable audit logging (store prompts, responses, timestamps).\n
+    - Sentiment currently uses Yahoo headlines; integrate institutional feeds for accuracy.\n
+    - Portfolio optimization is illustrative; integrate PyPortfolioOpt / Black-Litterman for real optimization.\n
     """)
-
-# --------------------------- End of app.py --------------------------- #
