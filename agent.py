@@ -414,9 +414,23 @@ with tabs[1]:
                     st.markdown(sentiment_text)
             news = fetch_news(s, limit=6)
             if news:
-                st.markdown("**Latest headlines:**")
+                st.markdown("### 📰 Latest News Headlines")
                 for n in news:
-                    st.markdown(f"- {n['title']}  — _{n.get('publisher','')}_")
+                    title = n.get("title", "Untitled")
+                    publisher = n.get("publisher", "Unknown Source")
+                    link = n.get("link", "")
+                    # Create a clickable card-like display
+                    st.markdown(
+                        f"""
+                        <div style='padding:10px 15px; margin-bottom:8px; border-radius:10px; background-color:#f9f9f9; box-shadow:0 1px 3px rgba(0,0,0,0.1);'>
+                            <a href='{link}' target='_blank' style='text-decoration:none; color:#0066cc; font-weight:600;'>{title}</a><br>
+                            <span style='font-size:13px; color:#555;'>🗞️ {publisher}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.info("No recent news headlines found for this company.")
 
 # --- Risk & Correlation Tab ---
 with tabs[2]:
