@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 from agno.agent import Agent
 from agno.models.google import Gemini
+from datetime import datetime
 
 
 # --------------------------- Setup --------------------------- #
@@ -132,16 +133,22 @@ def get_stock_recommendations(symbols):
 
 
 def get_final_investment_report(symbols):
+    current_date = datetime.now().strftime("%B %d, %Y at %I:%M %p %Z")
+
     market_analysis = get_market_analysis(symbols)
     company_analyses = [get_company_analysis(s) for s in symbols]
     stock_recommendations = get_stock_recommendations(symbols)
 
-    final_report = team_lead.run(
+    prompt = (
+        f"Today's date is {current_date}.\n"
+        f"You must use this date as the report timestamp.\n\n"
         f"Market Analysis:\n{market_analysis}\n\n"
         f"Company Analyses:\n{company_analyses}\n\n"
         f"Stock Recommendations:\n{stock_recommendations}\n\n"
-        f"Provide a comprehensive ranked list of stocks suitable for investment."
+        f"Provide a full investment report including this date as the generation date."
     )
+
+    final_report = team_lead.run(prompt)
     return final_report.content
 
 
