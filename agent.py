@@ -13,6 +13,8 @@ import feedparser
 from agno.agent import Agent
 from agno.models.google import Gemini
 from fpdf import FPDF
+import statsmodels.api as sm
+from typing import Dict, Tuple
 
 
 # --------------------------- Setup --------------------------- #
