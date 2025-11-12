@@ -524,10 +524,3 @@ with tabs[5]:
             st.markdown(final_report)
 
     st.markdown("---")
-    st.markdown("**Notes & Limitations**")
-    st.markdown("""
-    - Agents include explicit `Rationale:` and `Recommendation:` for XAI/auditability.\n
-    - For production, add immutable audit logging (store prompts, responses, timestamps).\n
-    - Sentiment currently uses Yahoo headlines; integrate institutional feeds for accuracy.\n
-    - Portfolio optimization is illustrative; integrate PyPortfolioOpt / Black-Litterman for real optimization.\n
-    """)
