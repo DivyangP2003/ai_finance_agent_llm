@@ -2,7 +2,7 @@ streamlit
 yfinance
 plotly
 python-dotenv
-agno
+agno>=0.2.0
 google-genai
 pandas
 numpy
