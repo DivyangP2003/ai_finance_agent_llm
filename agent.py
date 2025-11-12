@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[4]:
-
-
 import os
 import yfinance as yf
 import streamlit as st
@@ -13,14 +7,13 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 
 # --------------------------- Setup --------------------------- #
-load_dotenv()  # Load environment variables from .env
+load_dotenv()  # Load .env if running locally
 api_key_env = os.getenv("GOOGLE_API_KEY", "")
 
 # Streamlit page config
 st.set_page_config(page_title="AI Investment Strategist", page_icon="📈", layout="wide")
 
 # --------------------------- Utility Functions --------------------------- #
-
 def compare_stocks(symbols):
     """Fetch and compare 6-month performance for each stock."""
     data = {}
@@ -73,7 +66,6 @@ market_analyst = Agent(
         "Calculate percentage change over a 6-month period.",
         "Rank stocks based on their relative performance."
     ],
-    show_tool_calls=True,
     markdown=True
 )
 
@@ -151,8 +143,8 @@ def get_final_investment_report(symbols):
     )
     return final_report.content
 
-# --------------------------- Streamlit UI --------------------------- #
 
+# --------------------------- Streamlit UI --------------------------- #
 st.markdown("""
     <h1 style="text-align: center; color: #4CAF50;">📈 AI Investment Strategist</h1>
     <h3 style="text-align: center; color: #6c757d;">Generate personalized investment reports using AI and live market data.</h3>
@@ -194,10 +186,3 @@ if st.sidebar.button("Generate Investment Report"):
 
             except Exception as e:
                 st.error(f"⚠️ Error generating report: {e}")
-
-
-# In[ ]:
-
-
-
-
