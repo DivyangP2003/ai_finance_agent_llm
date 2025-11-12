@@ -1,0 +1,8 @@
+streamlit
+yfinance
+plotly
+python-dotenv
+agno
+google-generativeai
+pandas
+numpy
