@@ -22,53 +22,16 @@ api_key_env = os.getenv("GOOGLE_API_KEY", "")
 st.set_page_config(page_title="AI Market Intelligence (Multi-Agent)", page_icon="📊", layout="wide")
 
 # --------------------------- Country and Benchmark Mapping --------------------------- #
-# --------------------------- Country and Benchmark Mapping --------------------------- #
 COUNTRY_BENCHMARKS = {
     "United States": {
         "default": "^GSPC",
         "region": "US",
         "lang": "en-US",
         "benchmarks": {
-            "S&P 500": "^GSPC",
-            "Dow Jones Industrial Average": "^DJI",
-            "Nasdaq 100": "^NDX",
-            "Russell 2000": "^RUT"
-        }
-    },
-    "United Kingdom": {
-        "default": "^FTSE",
-        "region": "UK",
-        "lang": "en-GB",
-        "benchmarks": {
-            "FTSE 100": "^FTSE",
-            "FTSE 250": "^FTMC"
-        }
-    },
-    "Japan": {
-        "default": "^N225",
-        "region": "JP",
-        "lang": "ja-JP",
-        "benchmarks": {
-            "Nikkei 225": "^N225",
-            "TOPIX": "^TOPX"
-        }
-    },
-    "Europe": {
-        "default": "^STOXX50E",
-        "region": "EU",
-        "lang": "en-EU",
-        "benchmarks": {
-            "Euro Stoxx 50": "^STOXX50E",
-            "DAX (Germany)": "^GDAXI",
-            "CAC 40 (France)": "^FCHI"
-        }
-    },
-    "Hong Kong": {
-        "default": "^HSI",
-        "region": "HK",
-        "lang": "zh-HK",
-        "benchmarks": {
-            "Hang Seng Index": "^HSI"
+            "S&P 500": {"ticker": "^GSPC", "exchange_suffix": ""},
+            "Dow Jones Industrial Average": {"ticker": "^DJI", "exchange_suffix": ""},
+            "Nasdaq 100": {"ticker": "^NDX", "exchange_suffix": ""},
+            "Russell 2000": {"ticker": "^RUT", "exchange_suffix": ""}
         }
     },
     "India": {
@@ -76,8 +39,26 @@ COUNTRY_BENCHMARKS = {
         "region": "IN",
         "lang": "en-IN",
         "benchmarks": {
-            "BSE Sensex": "^BSESN",
-            "Nifty 50": "^NSEI"
+            "BSE Sensex": {"ticker": "^BSESN", "exchange_suffix": ".BO"},
+            "Nifty 50": {"ticker": "^NSEI", "exchange_suffix": ".NS"}
+        }
+    },
+    "United Kingdom": {
+        "default": "^FTSE",
+        "region": "UK",
+        "lang": "en-GB",
+        "benchmarks": {
+            "FTSE 100": {"ticker": "^FTSE", "exchange_suffix": ".L"},
+            "FTSE 250": {"ticker": "^FTMC", "exchange_suffix": ".L"}
+        }
+    },
+    "Japan": {
+        "default": "^N225",
+        "region": "JP",
+        "lang": "ja-JP",
+        "benchmarks": {
+            "Nikkei 225": {"ticker": "^N225", "exchange_suffix": ".T"},
+            "TOPIX": {"ticker": "^TOPX", "exchange_suffix": ".T"}
         }
     },
     "Canada": {
@@ -85,7 +66,7 @@ COUNTRY_BENCHMARKS = {
         "region": "CA",
         "lang": "en-CA",
         "benchmarks": {
-            "S&P/TSX Composite": "^GSPTSE"
+            "S&P/TSX Composite": {"ticker": "^GSPTSE", "exchange_suffix": ".TO"}
         }
     },
     "Australia": {
@@ -93,7 +74,25 @@ COUNTRY_BENCHMARKS = {
         "region": "AU",
         "lang": "en-AU",
         "benchmarks": {
-            "ASX 200": "^AXJO"
+            "ASX 200": {"ticker": "^AXJO", "exchange_suffix": ".AX"}
+        }
+    },
+    "Hong Kong": {
+        "default": "^HSI",
+        "region": "HK",
+        "lang": "zh-HK",
+        "benchmarks": {
+            "Hang Seng Index": {"ticker": "^HSI", "exchange_suffix": ".HK"}
+        }
+    },
+    "Europe": {
+        "default": "^STOXX50E",
+        "region": "EU",
+        "lang": "en-EU",
+        "benchmarks": {
+            "Euro Stoxx 50": {"ticker": "^STOXX50E", "exchange_suffix": ""},
+            "DAX (Germany)": {"ticker": "^GDAXI", "exchange_suffix": ""},
+            "CAC 40 (France)": {"ticker": "^FCHI", "exchange_suffix": ""}
         }
     }
 }
@@ -129,6 +128,16 @@ def fetch_news(symbol, country="United States", limit=10):
     country_info = COUNTRY_BENCHMARKS.get(country, COUNTRY_BENCHMARKS["United States"])
     region = country_info.get("region", "US")
     lang = country_info.get("lang", "en-US")
+    if "." not in symbol:
+        # Append exchange suffix if known from selected benchmark
+        try:
+            # Use the *first* benchmark entry as representative for this country
+            first_bench = next(iter(country_info["benchmarks"].values()))
+            suffix = first_bench.get("exchange_suffix", "")
+            if suffix:
+                symbol += suffix
+        except Exception:
+            pass  # fallback quietly if structure changes
 
     try:
         url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region={region}&lang={lang}"
@@ -773,10 +782,26 @@ def interpret_user_query(query, symbols, close_df):
         team_resp = AGENTS["TeamLeadAgent"].run(f"You are TeamLeadAgent. The user query: {query}. The symbols in scope are: {', '.join(symbols)}. Provide an action plan and which analyses to run. Include 'Rationale:' and 'Recommendation:'.")
         return team_resp.content, {"type": "generic", "text": team_resp.content}
 
+def normalize_symbols(symbols, country, exchange_suffix=""):
+    """
+    Adds the correct exchange suffix to stock symbols based on the selected
+    country and benchmark. Avoids duplication if suffix already present.
+    """
+    normalized = []
+    for s in symbols:
+        s = s.strip().upper()
+        if not s:
+            continue
+
+        # Skip if already has a dot or caret (^ = index)
+        if "." not in s and "^" not in s and exchange_suffix:
+            s += exchange_suffix
+
+        normalized.append(s)
+    return normalized
+
 # --------------------------- Streamlit UI --------------------------- #
 st.title("📊 AI Market Intelligence — Multi-Agent Decision Framework")
-# Sidebar
-# Sidebar
 st.sidebar.header("⚙️ Configuration")
 
 # --- Country Selection ---
@@ -788,12 +813,16 @@ selected_country = st.sidebar.selectbox(
 
 # --- Dynamic Benchmark Selection ---
 country_info = COUNTRY_BENCHMARKS[selected_country]
+
 benchmark_display = st.sidebar.selectbox(
     f"📈 Select Benchmark for {selected_country}",
     options=list(country_info["benchmarks"].keys()),
     index=0
 )
-benchmark = country_info["benchmarks"][benchmark_display]
+
+benchmark_info = country_info["benchmarks"][benchmark_display]
+benchmark = benchmark_info["ticker"]
+exchange_suffix = benchmark_info.get("exchange_suffix", "")
 
 # --- Stock input and API key ---
 input_symbols = st.sidebar.text_input(
@@ -803,6 +832,9 @@ input_symbols = st.sidebar.text_input(
 api_key = st.sidebar.text_input("Enter your Google API Key (optional)", type="password")
 
 symbols = [s.strip().upper() for s in input_symbols.split(",") if s.strip()]
+
+# Apply exchange suffix normalization AFTER user input
+symbols = normalize_symbols(symbols, country=selected_country, exchange_suffix=exchange_suffix)
 
 # --- Apply API key preference ---
 if api_key:
@@ -1136,9 +1168,6 @@ with tabs[6]:
             date_str = datetime.now().strftime("%B %d, %Y at %I:%M %p")
 
             # --- Run sub-agents with benchmark & country awareness ---
-
-            # Download close prices for all symbols
-            close_for_run = download_close_prices(symbols, period="1y")
             
             # 1️⃣ Market Analysis (covers all symbols)
             market_analysis = run_market_agent(
