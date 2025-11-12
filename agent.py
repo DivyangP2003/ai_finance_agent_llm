@@ -557,7 +557,6 @@ tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlat
 
 # --- User Guide Tab ---
 with tabs[0]:
-    st.title("📘 AI Market Intelligence — Comprehensive User Guide")
     st.markdown("""
     Welcome to **AI Market Intelligence**, a multi-agent financial analysis system powered by Gemini AI.  
     This platform helps you understand markets, companies, risks, and optimal portfolio allocations — even if you have **no prior finance background**.
