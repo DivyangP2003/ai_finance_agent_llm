@@ -258,44 +258,42 @@ def fetch_macro_indicators(start_date=None, end_date=None):
         return {"error": str(e), "indicators": indicators}
 
 @st.cache_data(ttl=60 * 10)
-def fetch_economic_calendar_tradingeconomics(country="united states", days=7):
+def fetch_economic_calendar_free(country="united states", days=7):
     """
-    Optional: fetch upcoming economic events from TradingEconomics calendar.
-    Requires TRADING_ECONOMICS_KEY env var to be set.
-    Docs: https://docs.tradingeconomics.com/
+    Fetch upcoming economic events from Investing.com (via investpy, free).
+    Country is dynamic and user-selectable.
+    No API key required.
     """
-    key = TRADING_ECONOMICS_KEY or ""
-    if not key:
-        return {"error": "no_key", "events": []}
     try:
-        # Trading Economics example endpoint (calendar): adjust as per API docs if needed
-        # We'll use a simple events endpoint filtered by country and date range
-        # Note: please set TRADING_ECONOMICS_KEY env var with your API key
-        to_date = (datetime.utcnow() + timedelta(days=days)).strftime("%Y-%m-%d")
-        from_date = datetime.utcnow().strftime("%Y-%m-%d")
-        url = f"https://api.tradingeconomics.com/calendar?country={country}&start_date={from_date}&end_date={to_date}&c={key}"
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        events = r.json()
-        # normalize important fields
-        processed = []
-        for e in events:
-            processed.append({
-                "date": e.get("date"),
-                "country": e.get("country"),
-                "category": e.get("category"),
-                "impact": e.get("importance") or e.get("impact"),
-                "event": e.get("event"),
-                "actual": e.get("actual"),
-                "consensus": e.get("consensus"),
-                "previous": e.get("previous"),
-                "source": e.get("source")
-            })
-        return {"error": None, "events": processed}
-    except Exception as exc:
-        return {"error": str(exc), "events": []}
+        import investpy
+        from datetime import date
+        df = investpy.news.economic_calendar()
 
-def run_macro_agent():
+        today = date.today()
+        df = df[df['date'] >= str(today)]
+
+        # filter by selected country
+        df = df[df['country'].str.lower().str.contains(country.lower())]
+
+        df = df.head(30)  # limit for performance
+        events = []
+        for _, row in df.iterrows():
+            events.append({
+                "date": row.get("date"),
+                "country": row.get("country"),
+                "event": row.get("event"),
+                "impact": row.get("impact"),
+                "actual": row.get("actual"),
+                "forecast": row.get("forecast"),
+                "previous": row.get("previous"),
+                "source": "Investing.com"
+            })
+        return {"error": None, "events": events}
+    except Exception as e:
+        return {"error": str(e), "events": []}
+
+
+def run_macro_agent(country="united states"):
     """
     Compose macro prompt with fetched indicators and feed to MacroEconomicsAgent if available.
     Otherwise return a summary built from data (non-LLM fallback).
@@ -315,7 +313,7 @@ def run_macro_agent():
             last_val = ser.dropna().iloc[-1].values[0]
             report_text += f"- {k}: latest {last_val} (date: {last_idx.date()})\n"
     # fetch economic calendar if possible
-    calendar = fetch_economic_calendar_tradingeconomics()
+    calendar = fetch_economic_calendar_free(country=country)
     if calendar.get("error") is None and calendar.get("events"):
         report_text += "\nUpcoming economic events (TradingEconomics):\n"
         for e in calendar["events"][:8]:
@@ -814,9 +812,16 @@ with tabs[3]:
 with tabs[4]:
     st.header("Macro Snapshot & Economic Calendar")
     st.markdown("Fetch key macro indicators and optional economic calendar (TradingEconomics).")
+    st.markdown("### 🌍 Select country for economic calendar")
+    country_selected = st.selectbox(
+    "Country", 
+    ["United States", "India", "United Kingdom", "Germany", "China", "Japan", "Canada", "Australia"],
+    index=0
+    )
+
     if st.button("Fetch Macro Snapshot & Calendar"):
-        with st.spinner("Fetching macro indicators..."):
-            macro_text, raw_snapshot, calendar = run_macro_agent()
+        with st.spinner(f"Fetching macro indicators and calendar for {country_selected}..."):
+            macro_text, raw_snapshot, calendar = run_macro_agent(country_selected)
             st.subheader("Macro Agent Output")
             st.markdown(macro_text)
             st.subheader("Raw Snapshot (data sources)")
