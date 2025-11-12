@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 from agno.agent import Agent
 from agno.models.google import Gemini
-from datetime import datetime
+
 
 # --------------------------- Setup --------------------------- #
 load_dotenv()  # Load .env if running locally
@@ -150,10 +150,6 @@ st.markdown("""
     <h1 style="text-align: center; color: #4CAF50;">📈 AI Investment Strategist</h1>
     <h3 style="text-align: center; color: #6c757d;">Generate personalized investment reports using AI and live market data.</h3>
 """, unsafe_allow_html=True)
-
-
-current_datetime = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-st.markdown(f"##### 📅 Report generated on: **{current_datetime}**")
 
 
 st.sidebar.header("⚙️ Configuration")
