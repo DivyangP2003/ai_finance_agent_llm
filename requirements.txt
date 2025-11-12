@@ -7,10 +7,6 @@ google-genai
 pandas
 numpy
 PyPortfolioOpt>=1.5.5
-cvxpy>=1.4.2
-ecos>=2.0.12
-osqp>=0.6.3
-scs>=3.2.4
 sqlite3-binary>=0.0.1 ; platform_system != "Windows"
 matplotlib>=3.8.0
 scikit-learn>=1.5.0
