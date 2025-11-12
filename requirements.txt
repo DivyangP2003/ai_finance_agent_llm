@@ -7,7 +7,6 @@ google-genai
 pandas
 numpy
 feedparser
-pypfopt
 pandas_datareader
 requests
 investpy
