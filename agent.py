@@ -639,7 +639,6 @@ with tabs[4]:
                             st.markdown(text)
 
 # --- Audit & Exports Tab ---
-# --- Audit & Exports Tab ---
 with tabs[5]:
     st.header("Audit Trail & Report Generation")
     st.markdown("Run all agents together, integrate results, and generate a benchmark-aware TeamLead report.")
@@ -668,31 +667,9 @@ with tabs[5]:
                 benchmark=benchmark
             )
 
-            # --- Export Options ---
-
-        if st.button("📄 Export as PDF"):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            for line in final_report.splitlines():
-                pdf.multi_cell(0, 8, line)
-            pdf_output = pdf.output(dest="S").encode("latin1")
-            st.download_button(
-                label="⬇️ Download PDF",
-                data=pdf_output,
-                file_name=report_filename.replace(".md", ".pdf"),
-                mime="application/pdf"
-            )
-
-            st.download_button(
-                label="💾 Download as Markdown",
-                data=final_report,
-                file_name=report_filename,
-                mime="text/markdown"
-            )
-
-           
+            # --- Display results ---
+            st.markdown("### 🧠 TeamLead Consolidated Report (Benchmark-Aware)")
+            st.markdown(final_report)
 
     st.markdown("---")
-
 
