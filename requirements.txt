@@ -6,3 +6,14 @@ agno>=0.2.0
 google-genai
 pandas
 numpy
+PyPortfolioOpt>=1.5.5
+cvxpy>=1.4.2
+ecos>=2.0.12
+osqp>=0.6.3
+scs>=3.2.4
+sqlite3-binary>=0.0.1 ; platform_system != "Windows"
+matplotlib>=3.8.0
+scikit-learn>=1.5.0
+newsapi-python>=0.2.7  # (Optional helper package for NewsAPI)
+beautifulsoup4>=4.12.3  # for parsing if you add alt data later
+tqdm>=4.66.0
