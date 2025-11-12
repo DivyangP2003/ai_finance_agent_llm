@@ -15,7 +15,7 @@ Notes:
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import time
 import json
 import numpy as np
@@ -26,6 +26,7 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 import feedparser
 import requests
+import investpy
 
 # --- Optional imports that may not exist in all environments ---
 try:
@@ -265,8 +266,7 @@ def fetch_economic_calendar_free(country="united states", days=7):
     No API key required.
     """
     try:
-        import investpy
-        from datetime import date
+
         df = investpy.news.economic_calendar()
 
         today = date.today()
