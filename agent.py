@@ -412,11 +412,10 @@ def run_teamlead_agent(
     benchmark="^GSPC"
 ):
     """
-    Enhanced TeamLeadAgent prompt that integrates benchmark context
-    into the final consolidated investment report.
+    Enhanced TeamLeadAgent that produces a detailed, sectioned institutional report.
     """
 
-    # --- Fetch simple benchmark stats (for context) ---
+    # --- Fetch simple benchmark stats ---
     bench_prices = download_close_prices([benchmark], period="1y")
     if not bench_prices.empty:
         bench_returns = compute_returns(bench_prices)
@@ -429,25 +428,74 @@ def run_teamlead_agent(
     # --- Flatten dicts for readability ---
     def flatten_dict(d):
         if isinstance(d, dict):
-            return "\n".join([f"{k}: {v}" for k, v in d.items()])
+            return "\n".join([f"**{k}:** {v}" for k, v in d.items()])
         return str(d)
 
-    prompt = (
-        f"You are TeamLeadAgent. Today's date: {date_str}.\n\n"
-        f"Benchmark Context:\n{bench_summary}\n\n"
-        "Integrate the following analyses into a concise, time-stamped investment report.\n\n"
-        f"Market Analysis:\n{market_analysis}\n\n"
-        f"Company Analyses:\n{flatten_dict(company_analyses)}\n\n"
-        f"Sentiment Analyses:\n{flatten_dict(sentiment_analyses)}\n\n"
-        f"Risk Analysis:\n{risk_analysis}\n\n"
-        f"Portfolio Recommendation:\n{portfolio_recommendation}\n\n"
-        "Instructions:\n"
-        "- Provide a short Executive Summary (2–4 sentences) explicitly mentioning benchmark-relative performance.\n"
-        "- List the Top 3 actionable recommendations, each with 'Rationale:'.\n"
-        "- Reference any benchmark deviations or risk exposures vs. the benchmark (e.g., beta, tracking error, active weights).\n"
-        "- Finish with an Audit Trail (which agents produced which sections) for transparency.\n"
-        "- Use markdown headings throughout.\n"
-    )
+    # --- Rich Prompt ---
+    prompt = f"""
+You are **TeamLeadAgent**, the senior portfolio strategist and integrator.
+Today's date: {date_str}.
+
+**Benchmark Context:** {bench_summary}
+
+Integrate the following agent outputs into a detailed institutional-style investment report.
+Include clear markdown headings for each section.
+
+---
+
+### Agent Inputs
+
+**Market Analysis:**
+{market_analysis}
+
+**Company Analyses:**
+{flatten_dict(company_analyses)}
+
+**Sentiment Analyses:**
+{flatten_dict(sentiment_analyses)}
+
+**Risk Analysis:**
+{risk_analysis}
+
+**Portfolio Recommendation:**
+{portfolio_recommendation}
+
+---
+
+### Report Instructions
+
+Create a **comprehensive and audit-ready investment report** with these sections:
+
+1. **Executive Summary**  
+   - 3–4 sentences summarizing overall market tone, benchmark-relative performance, and key takeaways.
+
+2. **Market & Benchmark Overview**  
+   - Summarize the market environment (risk-on/off), benchmark performance, volatility, and notable macro signals.
+
+3. **Company Deep Dives**  
+   - Highlight each company's fundamentals, catalysts, and risks (based on sub-agent inputs).
+
+4. **Sentiment Insights**  
+   - Summarize sentiment tone, key drivers, and overall behavioral bias (bullish/bearish/neutral).
+
+5. **Risk Assessment**  
+   - Interpret VaR, max drawdown, and correlation results.  
+   - Explicitly state benchmark-relative exposures (e.g., beta > 1, sector concentration).
+
+6. **Portfolio Strategy**  
+   - Describe recommended allocation, rationale for each tilt, and benchmark-relative positioning (active vs passive stance).  
+   - Include a short note on rebalancing or tactical hedges.
+
+7. **Top 3 Actionable Recommendations**  
+   - List each with a bold heading and **Rationale:** below.
+
+8. **Audit Trail**  
+   - Table of which agents contributed each section (MarketAnalystAgent, RiskAnalystAgent, etc.).  
+   - Keep this concise but clear for governance/audit purposes.
+
+Use a professional tone, markdown formatting, and numbered sections.
+Avoid repeating raw data — interpret and summarize concisely.
+    """
 
     response = AGENTS["TeamLeadAgent"].run(prompt)
     return response.content
