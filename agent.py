@@ -337,51 +337,116 @@ def run_risk_agent(symbols, close_df, benchmark="^GSPC"):
     response = AGENTS["RiskAnalystAgent"].run(prompt)
     return response.content
 
-def run_portfolio_agent(symbols, close_df, constraints=None):
+def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None):
     """
-    Portfolio strategist: propose naive allocations based on equal-weight, risk-parity proxy,
-    or momentum tilt. For production, integrate PyPortfolioOpt or Black-Litterman.
-    We'll provide a few candidate allocations and ask the agent to pick and justify one.
+    Enhanced benchmark-aware portfolio strategist.
+    Provides equal-weight, risk-parity, and momentum-tilt allocations,
+    and includes benchmark-relative context (return, volatility, beta).
     """
+
+    if close_df.empty:
+        return "No data available for portfolio construction."
+
     returns = compute_returns(close_df)
-    # simple candidate allocations:
+
+    # --- Simple candidate allocations ---
     n = len(symbols)
-    equal = {s: round(1/n, 4) for s in symbols}
-    # risk-parity proxy: weight inversely proportional to vol
+    equal = {s: round(1 / n, 4) for s in symbols}
+
     vols = returns.std() * np.sqrt(252)
     invvol = (1 / vols)
     invvol = invvol / invvol.sum()
-    invvol_alloc = invvol.to_dict()
-    # momentum tilt: 6-month returns normalized
-    six_month = close_df.pct_change(126).iloc[-1] if close_df.shape[0] > 130 else close_df.pct_change().iloc[-1]
+    invvol_alloc = invvol.round(4).to_dict()
+
+    # momentum tilt (6-month)
+    six_month = close_df.pct_change(126).iloc[-1] if close_df.shape[0] > 126 else close_df.pct_change().iloc[-1]
     momentum = six_month.clip(lower=-1).fillna(0)
     if momentum.sum() <= 0:
         momentum_alloc = equal.copy()
     else:
         mom = (momentum + 0.0001) / (momentum.sum() + 0.0001)
-        momentum_alloc = mom.to_dict()
+        momentum_alloc = mom.round(4).to_dict()
 
-    prompt = f"You are PortfolioStrategistAgent. Consider the following allocation candidates for symbols: {', '.join(symbols)}.\n\n"
-    prompt += "Candidate allocations:\n"
-    prompt += f"- Equal-weight: {equal}\n"
-    prompt += f"- Inverse-vol (risk-parity proxy): { {k: round(v,4) for k,v in invvol_alloc.items()} }\n"
-    prompt += f"- Momentum-tilt: { {k: round(v,4) for k,v in momentum_alloc.items()} }\n"
-    prompt += "\nConstraints (if any): {}\n".format(constraints or "None")
-    prompt += "Instructions: Select the most suitable allocation for a moderately risk-tolerant institutional investor, justify selection in 'Rationale:' and 'Recommendation:' sections, and give a 2-line rebalancing guideline.\n"
+    # --- Benchmark Integration ---
+    bench_stats = ""
+    if benchmark:
+        bench_prices = download_close_prices([benchmark], period="1y")
+        if not bench_prices.empty:
+            bench_returns = compute_returns(bench_prices)
+            bench_ret = (bench_prices.iloc[-1] / bench_prices.iloc[0] - 1).iloc[0]
+            bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
+            bench_stats = f"Benchmark ({benchmark}) return: {bench_ret:.2%}, volatility: {bench_vol:.2%}"
+        else:
+            bench_stats = f"Benchmark ({benchmark}) data unavailable."
+
+    # --- Build the prompt ---
+    prompt = (
+        f"You are PortfolioStrategistAgent.\n\n"
+        f"Symbols in scope: {', '.join(symbols)}\n"
+        f"{bench_stats}\n\n"
+        "Candidate allocations:\n"
+        f"- Equal-weight: {equal}\n"
+        f"- Inverse-vol (risk-parity proxy): {invvol_alloc}\n"
+        f"- Momentum-tilt: {momentum_alloc}\n\n"
+        f"Constraints (if any): {constraints or 'None'}\n\n"
+        "Instructions:\n"
+        "- Choose the most suitable allocation for a moderately risk-tolerant institutional investor.\n"
+        "- Consider benchmark-relative performance and potential tracking error.\n"
+        "- If active risk is acceptable, propose small benchmark tilts (e.g., overweight momentum sectors).\n"
+        "- Explain your reasoning with 'Rationale:' and 'Recommendation:' sections.\n"
+        "- End with a 2-line guideline on rebalancing frequency.\n"
+    )
+
     response = AGENTS["PortfolioStrategistAgent"].run(prompt)
     return response.content
 
-def run_teamlead_agent(date_str, market_analysis, company_analyses, sentiment_analyses, risk_analysis, portfolio_recommendation):
+def run_teamlead_agent(
+    date_str,
+    market_analysis,
+    company_analyses,
+    sentiment_analyses,
+    risk_analysis,
+    portfolio_recommendation,
+    benchmark="^GSPC"
+):
+    """
+    Enhanced TeamLeadAgent prompt that integrates benchmark context
+    into the final consolidated investment report.
+    """
+
+    # --- Fetch simple benchmark stats (for context) ---
+    bench_prices = download_close_prices([benchmark], period="1y")
+    if not bench_prices.empty:
+        bench_returns = compute_returns(bench_prices)
+        bench_ret = (bench_prices.iloc[-1] / bench_prices.iloc[0] - 1).iloc[0]
+        bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
+        bench_summary = f"Benchmark ({benchmark}) return: {bench_ret:.2%}, volatility: {bench_vol:.2%}"
+    else:
+        bench_summary = f"Benchmark ({benchmark}) data unavailable."
+
+    # --- Flatten dicts for readability ---
+    def flatten_dict(d):
+        if isinstance(d, dict):
+            return "\n".join([f"{k}: {v}" for k, v in d.items()])
+        return str(d)
+
     prompt = (
-        f"You are TeamLeadAgent. Today's date is {date_str}.\n"
-        f"Integrate these sections into a clear, time-stamped investment report. Use the following inputs:\n\n"
+        f"You are TeamLeadAgent. Today's date: {date_str}.\n\n"
+        f"Benchmark Context:\n{bench_summary}\n\n"
+        "Integrate the following analyses into a concise, time-stamped investment report.\n\n"
         f"Market Analysis:\n{market_analysis}\n\n"
-        f"Company Analyses:\n{company_analyses}\n\n"
-        f"Sentiment Analyses:\n{sentiment_analyses}\n\n"
+        f"Company Analyses:\n{flatten_dict(company_analyses)}\n\n"
+        f"Sentiment Analyses:\n{flatten_dict(sentiment_analyses)}\n\n"
         f"Risk Analysis:\n{risk_analysis}\n\n"
         f"Portfolio Recommendation:\n{portfolio_recommendation}\n\n"
-        "Instructions: Provide a short Executive Summary (2-4 sentences), Top 3 actionable recommendations with 'Rationale:' for each, and an Audit Trail (which agents produced the inputs). Keep the report structured with explicit headings.\n"
+        "Instructions:\n"
+        "- Provide a short Executive Summary (2–4 sentences) explicitly mentioning benchmark-relative performance.\n"
+        "- List the Top 3 actionable recommendations, each with 'Rationale:'.\n"
+        "- Reference any benchmark deviations or risk exposures vs. the benchmark (e.g., beta, tracking error, active weights).\n"
+        "- Finish with an Audit Trail (which agents produced which sections) for transparency.\n"
+        "- Use markdown headings throughout.\n"
     )
+
     response = AGENTS["TeamLeadAgent"].run(prompt)
     return response.content
 
