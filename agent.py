@@ -21,6 +21,83 @@ api_key_env = os.getenv("GOOGLE_API_KEY", "")
 
 st.set_page_config(page_title="AI Market Intelligence (Multi-Agent)", page_icon="📊", layout="wide")
 
+# --------------------------- Country and Benchmark Mapping --------------------------- #
+# --------------------------- Country and Benchmark Mapping --------------------------- #
+COUNTRY_BENCHMARKS = {
+    "United States": {
+        "default": "^GSPC",
+        "region": "US",
+        "lang": "en-US",
+        "benchmarks": {
+            "S&P 500": "^GSPC",
+            "Dow Jones Industrial Average": "^DJI",
+            "Nasdaq 100": "^NDX",
+            "Russell 2000": "^RUT"
+        }
+    },
+    "United Kingdom": {
+        "default": "^FTSE",
+        "region": "UK",
+        "lang": "en-GB",
+        "benchmarks": {
+            "FTSE 100": "^FTSE",
+            "FTSE 250": "^FTMC"
+        }
+    },
+    "Japan": {
+        "default": "^N225",
+        "region": "JP",
+        "lang": "ja-JP",
+        "benchmarks": {
+            "Nikkei 225": "^N225",
+            "TOPIX": "^TOPX"
+        }
+    },
+    "Europe": {
+        "default": "^STOXX50E",
+        "region": "EU",
+        "lang": "en-EU",
+        "benchmarks": {
+            "Euro Stoxx 50": "^STOXX50E",
+            "DAX (Germany)": "^GDAXI",
+            "CAC 40 (France)": "^FCHI"
+        }
+    },
+    "Hong Kong": {
+        "default": "^HSI",
+        "region": "HK",
+        "lang": "zh-HK",
+        "benchmarks": {
+            "Hang Seng Index": "^HSI"
+        }
+    },
+    "India": {
+        "default": "^BSESN",
+        "region": "IN",
+        "lang": "en-IN",
+        "benchmarks": {
+            "BSE Sensex": "^BSESN",
+            "Nifty 50": "^NSEI"
+        }
+    },
+    "Canada": {
+        "default": "^GSPTSE",
+        "region": "CA",
+        "lang": "en-CA",
+        "benchmarks": {
+            "S&P/TSX Composite": "^GSPTSE"
+        }
+    },
+    "Australia": {
+        "default": "^AXJO",
+        "region": "AU",
+        "lang": "en-AU",
+        "benchmarks": {
+            "ASX 200": "^AXJO"
+        }
+    }
+}
+
 
 # --------------------------- Helper: caching --------------------------- #
 @st.cache_data(ttl=60 * 15)
@@ -43,14 +120,20 @@ def fetch_ticker_info(symbol):
     return info
 
 @st.cache_data(ttl=60 * 10)
-def fetch_news(symbol, limit=10):
+def fetch_news(symbol, country="United States", limit=10):
     """
-    Fetch recent Yahoo Finance news headlines via RSS feed fallback.
-    Works even if yfinance's .news endpoint is broken.
+    Fetch recent Yahoo Finance news headlines via RSS feed.
+    Region and language settings are dynamically fetched from COUNTRY_BENCHMARKS.
     """
+    # Fallback to US if country not in mapping
+    country_info = COUNTRY_BENCHMARKS.get(country, COUNTRY_BENCHMARKS["United States"])
+    region = country_info.get("region", "US")
+    lang = country_info.get("lang", "en-US")
+
     try:
-        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region={region}&lang={lang}"
         feed = feedparser.parse(url)
+
         processed = []
         for entry in feed.entries[:limit]:
             processed.append({
@@ -58,11 +141,23 @@ def fetch_news(symbol, limit=10):
                 "publisher": entry.get("source", "Yahoo Finance"),
                 "link": entry.link
             })
+
+        # Fallback to US feed if empty (for exotic tickers)
+        if not processed and country != "United States":
+            fallback_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+            feed = feedparser.parse(fallback_url)
+            processed = [{
+                "title": e.title,
+                "publisher": e.get("source", "Yahoo Finance"),
+                "link": e.link
+            } for e in feed.entries[:limit]]
+
         return processed
+
     except Exception as e:
-        st.warning(f"Failed to fetch RSS for {symbol}: {e}")
+        st.warning(f"⚠️ Failed to fetch RSS for {symbol} ({country}): {e}")
         return []
-        
+
 # --------------------------- Quantitative Analytics --------------------------- #
 def compute_returns(close_df):
     return close_df.pct_change().dropna()
@@ -174,13 +269,13 @@ def create_agents():
 AGENTS = create_agents()
 
 # --------------------------- Orchestration --------------------------- #
-def run_market_agent(symbols, close_df, benchmark="^GSPC"):
+def run_market_agent(symbols, close_df, benchmark="^GSPC", country="United States"):
     """
-    Enhanced version:
-    Includes benchmark returns, volatility, and relative comparisons.
+    MarketAnalystAgent — now region-aware.
+    Includes benchmark, volatility, and market regime comparisons with explicit country context.
     """
     if close_df.empty:
-        return "No price data available for market analysis."
+        return f"No price data available for market analysis in {country}."
 
     returns = compute_returns(close_df)
     six_month = returns.loc[returns.index >= (close_df.index.max() - pd.DateOffset(months=6))]
@@ -206,10 +301,15 @@ def run_market_agent(symbols, close_df, benchmark="^GSPC"):
             betas[s] = np.nan
 
     # --- Build the prompt ---
-    prompt = f"You are MarketAnalystAgent. Analyze the following quantitative metrics for symbols: {', '.join(close_df.columns)}.\n\n"
-    prompt += f"Latest date: {close_df.index.max().strftime('%Y-%m-%d')}\n\n"
+    prompt = f"""
+You are **MarketAnalystAgent**, analyzing equities in the **{country}** market.
 
-    prompt += "6-month returns (approx):\n"
+Benchmark selected: **{benchmark}**  
+Latest available data: {close_df.index.max().strftime('%Y-%m-%d')}
+
+### Quantitative Overview
+6-month returns (approx):
+"""
     for s, v in perf.items():
         prompt += f"- {s}: {v:.2%}\n"
 
@@ -225,51 +325,131 @@ def run_market_agent(symbols, close_df, benchmark="^GSPC"):
                 prompt += f"- {s}: {b:.2f}\n"
 
     prompt += (
-        "\nInstructions: Provide a short Market Overview, identify if there is a clear market regime "
-        "(risk-on / risk-off), discuss any benchmark-relative patterns, and list top 3 signals to monitor. "
-        "Include explicit sections labeled 'Rationale:' and 'Recommendation:'.\n"
+        "\nInstructions:\n"
+        "- Provide a short **Market Overview** focused on the {country} context.\n"
+        "- Identify if the market regime appears **risk-on** or **risk-off**.\n"
+        "- Discuss benchmark-relative trends and volatility.\n"
+        "- Mention any regional factors (e.g., monetary policy, sector dominance).\n"
+        "- Include clear sections labeled **'Rationale:'** and **'Recommendation:'**."
     )
 
     response = AGENTS["MarketAnalystAgent"].run(prompt)
     return response.content
 
 
-def run_company_agent(symbol):
+def run_company_agent(symbol, country="United States", benchmark="^GSPC"):
+    """
+    CompanyResearchAgent — region-aware version.
+    Adds country and benchmark context to company fundamentals analysis.
+    """
+
     info = fetch_ticker_info(symbol)
     news = fetch_news(symbol, limit=6)
-    # limit length of summary so the agent doesn't get huge payloads
-    prompt = f"You are CompanyResearchAgent. Provide a concise company analysis for {symbol}.\n\n"
-    prompt += f"Basic info (truncated): Name: {info.get('longName', symbol)}; Sector: {info.get('sector', 'N/A')}; Market Cap: {info.get('marketCap', 'N/A')}\n"
-    prompt += "Recent news headlines:\n"
+
+    # --- Prompt Building ---
+    company_name = info.get("longName", symbol)
+    sector = info.get("sector", "N/A")
+    market_cap = info.get("marketCap", "N/A")
+    currency = info.get("currency", "USD")
+
+    prompt = f"""
+You are **CompanyResearchAgent**, analyzing **{company_name} ({symbol})** in the **{country}** market.
+
+Benchmark selected for comparison: **{benchmark}**  
+Primary currency: **{currency}**  
+
+### Company Overview
+- Name: {company_name}  
+- Sector: {sector}  
+- Market Cap: {market_cap}
+
+### Recent Headlines
+"""
     for n in news:
-        prompt += f"- {n.get('title')}\n"
-    prompt += "\nInstructions: Summarize fundamentals, list top 3 catalysts and top 3 risks. Provide 'Rationale:' and 'Recommendation:' sections. Keep it concise.\n"
+        prompt += f"- {n.get('title', 'Untitled')}\n"
+
+    prompt += f"""
+### Instructions:
+Provide a concise, professional company analysis contextualized for the **{country}** market.
+If relevant, compare company performance, valuation, or growth trajectory versus the **{benchmark}** benchmark or sector peers.
+
+Your output must include:
+- **Fundamental summary:** Financial health, revenue trends, profitability, margins.
+- **Regional context:** Economic or policy factors affecting the firm (e.g., local interest rates, regulation, or trade exposure).
+- **Catalysts:** Top 3 upcoming events or drivers.
+- **Risks:** Top 3 key risk factors (macroeconomic, operational, or valuation).
+- **Rationale:** Explain your reasoning succinctly.
+- **Recommendation:** Clear investment view (e.g., Overweight, Hold, Underweight).
+- **Note:** Highlight if this company is a major component or outlier relative to the benchmark ({benchmark}).
+"""
+
     response = AGENTS["CompanyResearchAgent"].run(prompt)
     return response.content
 
-def run_sentiment_agent(symbol):
+
+def run_sentiment_agent(symbol, country="United States", benchmark="^GSPC"):
+    """
+    SentimentAgent — region- and benchmark-aware version.
+    Analyzes recent news headlines in the context of the selected country and benchmark.
+    """
+
     news = fetch_news(symbol, limit=12)
-    # Provide headlines to the SentimentAgent and ask for aggregated sentiment
     if not news:
-        return "No news to analyze."
-    prompt = f"You are SentimentAgent. Given the following headlines for {symbol}, produce an aggregated sentiment (-1 to +1), a short summary, and include 'Rationale:' and 'Recommendation:'.\n\nHeadlines:\n"
+        return f"No news found for {symbol} in the {country} market."
+
+    # --- Build Prompt ---
+    prompt = f"""
+You are **SentimentAgent**, analyzing media and market sentiment for **{symbol}** in the **{country}** market.
+
+Benchmark for contextual tone: **{benchmark}**
+
+### News Headlines to Analyze
+"""
     for n in news:
-        prompt += f"- {n.get('title')}\n"
-    prompt += "\nInstructions: consider tone and frequency; be explicit about uncertainty and sample size.\n"
+        prompt += f"- {n.get('title', 'Untitled')}\n"
+
+    prompt += f"""
+### Instructions:
+Analyze the **tone**, **bias**, and **frequency** of sentiment in these headlines — considering the **{country}** media and investor environment.
+
+Provide:
+1. **Aggregated Sentiment Score:**  
+   A numeric score between **-1 (very negative)** and **+1 (very positive)**.  
+   Be explicit about uncertainty and sample size.
+
+2. **Qualitative Summary:**  
+   - Overall tone (bullish, bearish, or neutral).  
+   - Whether sentiment aligns or diverges from the **{benchmark}** market mood.  
+   - Note any **regional context** (e.g., regulation, macro policy, sector bias).
+
+3. **Rationale:**  
+   - Explain key factors driving the sentiment (e.g., product launches, earnings results, policy changes).  
+   - Identify if tone is **short-term noise** or **structural**.
+
+4. **Recommendation:**  
+   - Summarize if sentiment supports **Buy**, **Hold**, or **Reduce** positioning.  
+   - If relevant, relate it to benchmark sentiment (“positive relative to S&P 500 tone”).
+
+Return the answer in clear markdown with sections:
+**Sentiment Score**, **Summary**, **Rationale**, and **Recommendation**.
+"""
+
     response = AGENTS["SentimentAgent"].run(prompt)
     return response.content
 
-def run_risk_agent(symbols, close_df, benchmark="^GSPC"):
+def run_risk_agent(symbols, close_df, benchmark="^GSPC", country="United States"):
     """
-    Enhanced version:
-    Adds benchmark-based VaR, correlation, and betas.
+    RiskAnalystAgent — region- and benchmark-aware version.
+    Computes and interprets risk metrics (VaR, volatility, drawdown, correlation, beta)
+    in the context of the selected country's market and benchmark.
     """
     if close_df.empty:
-        return "No price data for risk analysis."
+        return f"No price data available for risk analysis in the {country} market."
 
     returns = compute_returns(close_df)
     var_results, mdd_results, vol_results = {}, {}, {}
 
+    # --- Compute individual asset risk metrics ---
     for s in returns.columns:
         series = returns[s]
         var_95 = historical_var(series, alpha=0.05)
@@ -281,6 +461,7 @@ def run_risk_agent(symbols, close_df, benchmark="^GSPC"):
 
     # --- Benchmark Integration ---
     bench_stats = ""
+    beta_results = {}
     if benchmark:
         bench_prices = download_close_prices([benchmark], period="1y")
         if not bench_prices.empty:
@@ -288,67 +469,84 @@ def run_risk_agent(symbols, close_df, benchmark="^GSPC"):
             bench_var = historical_var(bench_returns.iloc[:, 0], alpha=0.05)
             bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
             bench_dd = max_drawdown(bench_prices.iloc[:, 0])
+            bench_name = benchmark
             bench_stats = (
-                f"\nBenchmark ({benchmark}) VaR(5%): {bench_var:.2%}, "
-                f"Vol: {bench_vol:.2%}, Max DD: {bench_dd:.2%}\n"
+                f"\nBenchmark ({bench_name}) — VaR(5%): {bench_var:.2%}, "
+                f"Volatility: {bench_vol:.2%}, Max Drawdown: {bench_dd:.2%}\n"
             )
 
-    # --- Beta & correlation with benchmark ---
-    beta_results = {}
-    if benchmark and not bench_prices.empty:
-        bench_returns = compute_returns(bench_prices)
-        for s in returns.columns:
-            beta_results[s] = compute_beta(returns[s], bench_returns.iloc[:, 0])
+            # Compute betas vs benchmark
+            for s in returns.columns:
+                beta_results[s] = compute_beta(returns[s], bench_returns.iloc[:, 0])
+        else:
+            for s in returns.columns:
+                beta_results[s] = np.nan
     else:
         for s in returns.columns:
             beta_results[s] = np.nan
 
+    # --- Correlation Matrix ---
     corr = returns.corr().round(3).to_dict()
 
-    # --- Prompt build ---
-    prompt = "You are RiskAnalystAgent. Compute and interpret risk metrics.\n\n"
-    prompt += "VaR (5%) per asset:\n"
+    # --- Prompt Building ---
+    prompt = f"""
+You are **RiskAnalystAgent**, analyzing portfolio and security-level risk in the **{country}** market.
+
+Selected benchmark: **{benchmark}**
+
+### Asset Risk Metrics
+VaR (5%) per asset:
+"""
     for s, v in var_results.items():
         prompt += f"- {s}: {v:.2%}\n"
 
-    prompt += "\nMax Drawdown:\n"
+    prompt += "\nMax Drawdown (peak-to-trough):\n"
     for s, v in mdd_results.items():
         prompt += f"- {s}: {v:.2%}\n"
 
-    prompt += "\nAnnualized volatility:\n"
+    prompt += "\nAnnualized Volatility (σ):\n"
     for s, v in vol_results.items():
         prompt += f"- {s}: {v:.2%}\n"
 
+    # Include benchmark metrics if available
     if bench_stats:
-        prompt += bench_stats
-        prompt += "Betas (vs benchmark):\n"
+        prompt += f"\n### Benchmark Risk Summary\n{bench_stats}"
+        prompt += "\n### Beta (vs Benchmark):\n"
         for s, b in beta_results.items():
             if not np.isnan(b):
                 prompt += f"- {s}: {b:.2f}\n"
 
-    prompt += "\nCorrelation snapshot (rounded):\n"
+    prompt += "\n### Correlation Matrix (rounded):\n"
     for s, row in corr.items():
         row_items = ", ".join([f"{k}:{v}" for k, v in row.items()])
         prompt += f"- {s}: {row_items}\n"
 
-    prompt += (
-        "\nInstructions: Interpret these risk metrics, highlight benchmark-relative exposures (e.g., "
-        "beta > 1 means higher market sensitivity), list top 3 risk concerns, and include 'Rationale:' "
-        "and 'Recommendation:' sections.\n"
-    )
+    # --- Region-specific Instructions ---
+    prompt += f"""
+### Instructions:
+Interpret these risk metrics for the **{country}** market context:
+- Discuss whether market volatility, drawdown, and VaR are high or low relative to the **{benchmark}**.
+- Explain if risk levels suggest a **risk-on** or **risk-off** environment regionally.
+- Highlight any **benchmark-relative exposures** (e.g., beta > 1 → more sensitive than the benchmark).
+- Mention **correlation clusters** or **sector concentration** effects if visible.
+- Note regional influences (e.g., policy shifts, currency volatility, geopolitical risks).
+
+Structure your answer as:
+**Summary**, **Rationale**, and **Recommendation**.
+"""
 
     response = AGENTS["RiskAnalystAgent"].run(prompt)
     return response.content
 
-def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None):
+
+def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None, country="United States"):
     """
-    Enhanced benchmark-aware portfolio strategist.
-    Provides equal-weight, risk-parity, and momentum-tilt allocations,
-    and includes benchmark-relative context (return, volatility, beta).
+    PortfolioStrategistAgent — region- and benchmark-aware version.
+    Suggests allocations (equal-weight, risk-parity, momentum-tilt) contextualized for the selected country.
     """
 
     if close_df.empty:
-        return "No data available for portfolio construction."
+        return f"No data available for portfolio construction in the {country} market."
 
     returns = compute_returns(close_df)
 
@@ -361,7 +559,7 @@ def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None):
     invvol = invvol / invvol.sum()
     invvol_alloc = invvol.round(4).to_dict()
 
-    # momentum tilt (6-month)
+    # --- Momentum-tilt (6-month) ---
     six_month = close_df.pct_change(126).iloc[-1] if close_df.shape[0] > 126 else close_df.pct_change().iloc[-1]
     momentum = six_month.clip(lower=-1).fillna(0)
     if momentum.sum() <= 0:
@@ -370,7 +568,7 @@ def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None):
         mom = (momentum + 0.0001) / (momentum.sum() + 0.0001)
         momentum_alloc = mom.round(4).to_dict()
 
-    # --- Benchmark Integration ---
+    # --- Benchmark stats ---
     bench_stats = ""
     if benchmark:
         bench_prices = download_close_prices([benchmark], period="1y")
@@ -378,30 +576,47 @@ def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None):
             bench_returns = compute_returns(bench_prices)
             bench_ret = (bench_prices.iloc[-1] / bench_prices.iloc[0] - 1).iloc[0]
             bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
-            bench_stats = f"Benchmark ({benchmark}) return: {bench_ret:.2%}, volatility: {bench_vol:.2%}"
+            bench_stats = f"Benchmark ({benchmark}) — Return: {bench_ret:.2%}, Volatility: {bench_vol:.2%}"
         else:
-            bench_stats = f"Benchmark ({benchmark}) data unavailable."
+            bench_stats = f"Benchmark ({benchmark}) data unavailable for {country}."
 
-    # --- Build the prompt ---
-    prompt = (
-        f"You are PortfolioStrategistAgent.\n\n"
-        f"Symbols in scope: {', '.join(symbols)}\n"
-        f"{bench_stats}\n\n"
-        "Candidate allocations:\n"
-        f"- Equal-weight: {equal}\n"
-        f"- Inverse-vol (risk-parity proxy): {invvol_alloc}\n"
-        f"- Momentum-tilt: {momentum_alloc}\n\n"
-        f"Constraints (if any): {constraints or 'None'}\n\n"
-        "Instructions:\n"
-        "- Choose the most suitable allocation for a moderately risk-tolerant institutional investor.\n"
-        "- Consider benchmark-relative performance and potential tracking error.\n"
-        "- If active risk is acceptable, propose small benchmark tilts (e.g., overweight momentum sectors).\n"
-        "- Explain your reasoning with 'Rationale:' and 'Recommendation:' sections.\n"
-        "- End with a 2-line guideline on rebalancing frequency.\n"
-    )
+    # --- Build AI Prompt ---
+    prompt = f"""
+You are **PortfolioStrategistAgent**, designing an optimal multi-asset allocation strategy for the **{country}** market.
+
+Selected Benchmark: **{benchmark}**  
+{bench_stats}
+
+### Portfolio Universe
+Symbols in scope: {', '.join(symbols)}
+
+### Candidate Allocations
+- Equal-weight: {equal}
+- Inverse-vol (risk-parity proxy): {invvol_alloc}
+- Momentum-tilt (6M trend): {momentum_alloc}
+
+### Constraints
+{constraints or "None"}
+
+### Instructions:
+Formulate an allocation recommendation for a **moderately risk-tolerant institutional investor** in the **{country}** market.
+Include benchmark-relative and regional insights:
+- Discuss how the proposed portfolio might **track or deviate** from the **{benchmark}** (tracking error).
+- If **active risk** is acceptable, identify small benchmark **tilts** (e.g., overweight tech, underweight cyclicals).
+- Consider **local factors** (e.g., market liquidity, currency risk, macro policy, or regional concentration).
+- Reference any **diversification** benefits visible in volatility or correlation patterns.
+- If relevant, mention **cross-market hedging** or **ETF substitutes**.
+- Explain your logic in two sections:
+  - **Rationale:** Why this allocation suits current regional conditions.
+  - **Recommendation:** Specific weights and guidance (e.g., rebalance quarterly, tilt toward growth sectors).
+
+Output format:
+**Summary**, **Rationale**, **Recommendation**, **Rebalancing Note** (2 lines).
+"""
 
     response = AGENTS["PortfolioStrategistAgent"].run(prompt)
     return response.content
+
 
 def run_teamlead_agent(
     date_str,
@@ -410,93 +625,112 @@ def run_teamlead_agent(
     sentiment_analyses,
     risk_analysis,
     portfolio_recommendation,
-    benchmark="^GSPC"
+    benchmark="^GSPC",
+    country="United States"
 ):
     """
-    Enhanced TeamLeadAgent that produces a detailed, sectioned institutional report.
+    TeamLeadAgent — region- and benchmark-aware integrator.
+    Produces a cohesive, country-contextual institutional report combining all sub-agent outputs.
     """
 
-    # --- Fetch simple benchmark stats ---
+    # --- Fetch benchmark stats ---
     bench_prices = download_close_prices([benchmark], period="1y")
     if not bench_prices.empty:
         bench_returns = compute_returns(bench_prices)
         bench_ret = (bench_prices.iloc[-1] / bench_prices.iloc[0] - 1).iloc[0]
         bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
-        bench_summary = f"Benchmark ({benchmark}) return: {bench_ret:.2%}, volatility: {bench_vol:.2%}"
+        bench_summary = f"Benchmark ({benchmark}) — 1Y Return: {bench_ret:.2%}, Volatility: {bench_vol:.2%}"
     else:
-        bench_summary = f"Benchmark ({benchmark}) data unavailable."
+        bench_summary = f"Benchmark ({benchmark}) data unavailable for {country}."
 
-    # --- Flatten dicts for readability ---
+    # --- Helper to flatten dicts (Company & Sentiment outputs) ---
     def flatten_dict(d):
         if isinstance(d, dict):
-            return "\n".join([f"**{k}:** {v}" for k, v in d.items()])
+            return "\n".join([f"**{k}:**\n{v}" for k, v in d.items()])
         return str(d)
 
-    # --- Rich Prompt ---
+    # --- Build AI Prompt ---
     prompt = f"""
 You are **TeamLeadAgent**, the senior portfolio strategist and integrator.
-Today's date: {date_str}.
 
-**Benchmark Context:** {bench_summary}
+Today's Date: {date_str}  
+**Country/Region:** {country}  
+**Selected Benchmark:** {benchmark}  
+**Benchmark Summary:** {bench_summary}
 
-Integrate the following agent outputs into a detailed institutional-style investment report.
-Include clear markdown headings for each section.
+Integrate the following agent outputs into a cohesive, benchmark-aware investment report for the **{country}** market.
 
 ---
 
 ### Agent Inputs
 
-**Market Analysis:**
+**Market Analysis (MarketAnalystAgent):**
 {market_analysis}
 
-**Company Analyses:**
+**Company Analyses (CompanyResearchAgent):**
 {flatten_dict(company_analyses)}
 
-**Sentiment Analyses:**
+**Sentiment Analyses (SentimentAgent):**
 {flatten_dict(sentiment_analyses)}
 
-**Risk Analysis:**
+**Risk Analysis (RiskAnalystAgent):**
 {risk_analysis}
 
-**Portfolio Recommendation:**
+**Portfolio Recommendation (PortfolioStrategistAgent):**
 {portfolio_recommendation}
 
 ---
 
 ### Report Instructions
 
-Create a **comprehensive and audit-ready investment report** with these sections:
+Produce a **comprehensive, professional, and benchmark-aware investment report** tailored for an institutional audience in the **{country}** market.
+
+Your report must include the following sections in Markdown:
 
 1. **Executive Summary**  
-   - 3–4 sentences summarizing overall market tone, benchmark-relative performance, and key takeaways.
+   - Summarize market tone, benchmark-relative performance, and key macro trends.  
+   - Highlight whether the {country} market is in a **risk-on** or **risk-off** phase.
 
 2. **Market & Benchmark Overview**  
-   - Summarize the market environment (risk-on/off), benchmark performance, volatility, and notable macro signals.
+   - Interpret the {benchmark} benchmark’s performance (return, volatility, trends).  
+   - Discuss how analyzed stocks compare with the benchmark.  
+   - Mention any relevant regional macro or policy context (interest rates, inflation, regulation).
 
 3. **Company Deep Dives**  
-   - Highlight each company's fundamentals, catalysts, and risks (based on sub-agent inputs).
+   - Summarize key company fundamentals and catalysts.  
+   - Contrast them with regional sector peers where relevant.
 
 4. **Sentiment Insights**  
-   - Summarize sentiment tone, key drivers, and overall behavioral bias (bullish/bearish/neutral).
+   - Aggregate tone from news and investor sentiment in the {country} market.  
+   - Note if sentiment aligns or diverges from the benchmark’s mood.
 
 5. **Risk Assessment**  
-   - Interpret VaR, max drawdown, and correlation results.  
-   - Explicitly state benchmark-relative exposures (e.g., beta > 1, sector concentration).
+   - Interpret VaR, volatility, drawdowns, and betas relative to the {benchmark}.  
+   - Identify key systemic and idiosyncratic risks specific to the {country} market.  
+   - Include regional influences (e.g., currency swings, policy shocks, or commodity exposure).
 
-6. **Portfolio Strategy**  
-   - Describe recommended allocation, rationale for each tilt, and benchmark-relative positioning (active vs passive stance).  
-   - Include a short note on rebalancing or tactical hedges.
+6. **Portfolio Strategy & Allocation**  
+   - Discuss recommended weights (equal, risk-parity, momentum).  
+   - Explain regional tilts or deviations from the {benchmark}.  
+   - Provide a concise **Rebalancing Note** (e.g., “Quarterly or on 20% volatility shift”).
 
 7. **Top 3 Actionable Recommendations**  
-   - List each with a bold heading and **Rationale:** below.
+   - Each with a **bold heading** and a **Rationale** section.  
+   - Recommendations should align with the country’s market tone and benchmark dynamics.
 
 8. **Audit Trail**  
-   - Table of which agents contributed each section (MarketAnalystAgent, RiskAnalystAgent, etc.).  
-   - Keep this concise but clear for governance/audit purposes.
+   - Include a brief table showing which agents contributed each section.  
+   - Use bullet points (e.g., “Market Analysis — MarketAnalystAgent”).
 
-Use a professional tone, markdown formatting, and numbered sections.
-Avoid repeating raw data — interpret and summarize concisely.
-    """
+---
+
+### Output Requirements:
+- Write in **professional Markdown** suitable for institutional or client presentation.
+- Avoid repetition; summarize key insights clearly.
+- All quantitative references must be benchmark-relative (vs {benchmark}) when applicable.
+- Keep tone objective, concise, and audit-friendly.
+- Begin with a line stating: “**AI-Generated Institutional Market Report for {country} — Benchmark: {benchmark}**”.
+"""
 
     response = AGENTS["TeamLeadAgent"].run(prompt)
     return response.content
@@ -542,13 +776,35 @@ def interpret_user_query(query, symbols, close_df):
 # --------------------------- Streamlit UI --------------------------- #
 st.title("📊 AI Market Intelligence — Multi-Agent Decision Framework")
 # Sidebar
+# Sidebar
 st.sidebar.header("⚙️ Configuration")
-input_symbols = st.sidebar.text_input("Enter Stock Symbols (comma-separated)", "AAPL, TSLA, GOOG")
+
+# --- Country Selection ---
+selected_country = st.sidebar.selectbox(
+    "🌍 Select Country/Region",
+    options=list(COUNTRY_BENCHMARKS.keys()),
+    index=0
+)
+
+# --- Dynamic Benchmark Selection ---
+country_info = COUNTRY_BENCHMARKS[selected_country]
+benchmark_display = st.sidebar.selectbox(
+    f"📈 Select Benchmark for {selected_country}",
+    options=list(country_info["benchmarks"].keys()),
+    index=0
+)
+benchmark = country_info["benchmarks"][benchmark_display]
+
+# --- Stock input and API key ---
+input_symbols = st.sidebar.text_input(
+    f"Enter Stock Symbols ({selected_country} Market Codes)",
+    "AAPL, TSLA, GOOG" if selected_country == "United States" else ""
+)
 api_key = st.sidebar.text_input("Enter your Google API Key (optional)", type="password")
-benchmark = st.sidebar.text_input("Benchmark ticker (for beta/vol):", "^GSPC")
 
 symbols = [s.strip().upper() for s in input_symbols.split(",") if s.strip()]
 
+# --- Apply API key preference ---
 if api_key:
     os.environ["GOOGLE_API_KEY"] = api_key
 elif api_key_env:
@@ -754,7 +1010,7 @@ with tabs[1]:
 
         if st.button("Run MarketAnalystAgent"):
             with st.spinner("Running MarketAnalystAgent..."):
-                market_analysis_text = run_market_agent(symbols, close_df, benchmark=benchmark)
+                market_analysis_text = run_market_agent(symbols, close_df, benchmark=benchmark, country=selected_country)
                 st.markdown("### Market Analysis (XAI)")
                 st.markdown(market_analysis_text)
 
@@ -768,11 +1024,11 @@ with tabs[2]:
             st.write(f"Sector: {info.get('sector', 'N/A')} • MarketCap: {info.get('marketCap', 'N/A')}")
             if st.button(f"Run CompanyResearchAgent for {s}", key=f"company_{s}"):
                 with st.spinner(f"Running CompanyResearchAgent for {s}..."):
-                    company_text = run_company_agent(s)
+                    company_text = run_company_agent(s, country=selected_country, benchmark=benchmark)
                     st.markdown(company_text)
             if st.button(f"Run SentimentAgent for {s}", key=f"sent_{s}"):
                 with st.spinner(f"Running SentimentAgent for {s}..."):
-                    sentiment_text = run_sentiment_agent(s)
+                    sentiment_text = run_sentiment_agent(s, country=selected_country, benchmark=benchmark)
                     st.markdown(sentiment_text)
             news = fetch_news(s, limit=6)
             if news:
@@ -803,7 +1059,7 @@ with tabs[3]:
     else:
         if st.button("Run RiskAnalystAgent"):
             with st.spinner("Running RiskAnalystAgent..."):
-                risk_text = run_risk_agent(symbols, close_df_risk, benchmark=benchmark)
+                risk_text = run_risk_agent(symbols, close_df_risk, benchmark=benchmark, country=selected_country)
                 st.markdown("### Risk Analysis (XAI)")
                 st.markdown(risk_text)
 
@@ -836,7 +1092,7 @@ with tabs[4]:
         constraints = None
     if st.button("Run PortfolioStrategistAgent"):
         with st.spinner("Running PortfolioStrategistAgent..."):
-            strategy_text = run_portfolio_agent(symbols, close_df_port, constraints=constraints)
+            strategy_text = run_portfolio_agent(symbols, close_df_port, constraints=constraints, benchmark=benchmark, country=selected_country)
             st.markdown("### Allocation Recommendation (XAI)")
             st.markdown(strategy_text)
 
@@ -879,14 +1135,48 @@ with tabs[6]:
             close_for_run = download_close_prices(symbols, period="1y")
             date_str = datetime.now().strftime("%B %d, %Y at %I:%M %p")
 
-            # --- Run sub-agents with benchmark awareness ---
-            market_analysis = run_market_agent(symbols, close_for_run, benchmark=benchmark)
-            company_analyses = {s: run_company_agent(s) for s in symbols}
-            sentiment_analyses = {s: run_sentiment_agent(s) for s in symbols}
-            risk_analysis = run_risk_agent(symbols, close_for_run, benchmark=benchmark)
-            portfolio_recommendation = run_portfolio_agent(symbols, close_for_run, benchmark=benchmark)
+            # --- Run sub-agents with benchmark & country awareness ---
 
-            # --- Generate benchmark-aware final report ---
+            # Download close prices for all symbols
+            close_for_run = download_close_prices(symbols, period="1y")
+            
+            # 1️⃣ Market Analysis (covers all symbols)
+            market_analysis = run_market_agent(
+                symbols=symbols,
+                close_df=close_for_run,
+                benchmark=benchmark,
+                country=selected_country
+            )
+            
+            # 2️⃣ Company Analyses (per symbol)
+            company_analyses = {
+                s: run_company_agent(s, country=selected_country, benchmark=benchmark)
+                for s in symbols
+            }
+            
+            # 3️⃣ Sentiment Analyses (per symbol)
+            sentiment_analyses = {
+                s: run_sentiment_agent(s, country=selected_country, benchmark=benchmark)
+                for s in symbols
+            }
+            
+            # 4️⃣ Risk Analysis (covers all symbols)
+            risk_analysis = run_risk_agent(
+                symbols=symbols,
+                close_df=close_for_run,
+                benchmark=benchmark,
+                country=selected_country
+            )
+            
+            # 5️⃣ Portfolio Recommendation (covers all symbols)
+            portfolio_recommendation = run_portfolio_agent(
+                symbols=symbols,
+                close_df=close_for_run,
+                benchmark=benchmark,
+                country=selected_country
+            )
+            
+            # 6️⃣ Final Integration Report
             final_report = run_teamlead_agent(
                 date_str=date_str,
                 market_analysis=market_analysis,
@@ -894,8 +1184,10 @@ with tabs[6]:
                 sentiment_analyses=sentiment_analyses,
                 risk_analysis=risk_analysis,
                 portfolio_recommendation=portfolio_recommendation,
-                benchmark=benchmark
+                benchmark=benchmark,
+                country=selected_country
             )
+            
 
             # --- Display results ---
             st.markdown("### 🧠 TeamLead Consolidated Report (Benchmark-Aware)")
