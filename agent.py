@@ -59,7 +59,7 @@ def get_company_news(symbol):
 
 # --------------------------- AI Agents --------------------------- #
 market_analyst = Agent(
-    model=Gemini(id="gemini-2.0-flash-exp"),
+    model=Gemini(id="gemini-2.0-flash"),
     description="Analyzes and compares stock performance over time.",
     instructions=[
         "Retrieve and compare stock performance from Yahoo Finance.",
@@ -70,7 +70,7 @@ market_analyst = Agent(
 )
 
 company_researcher = Agent(
-    model=Gemini(id="gemini-2.0-flash-exp"),
+    model=Gemini(id="gemini-2.0-flash"),
     description="Fetches company profiles, financials, and latest news.",
     instructions=[
         "Summarize company fundamentals and sector relevance.",
@@ -80,7 +80,7 @@ company_researcher = Agent(
 )
 
 stock_strategist = Agent(
-    model=Gemini(id="gemini-2.0-flash-exp"),
+    model=Gemini(id="gemini-2.0-flash"),
     description="Provides investment insights and recommends top stocks.",
     instructions=[
         "Analyze performance trends and fundamentals.",
@@ -90,7 +90,7 @@ stock_strategist = Agent(
 )
 
 team_lead = Agent(
-    model=Gemini(id="gemini-2.0-flash-exp"),
+    model=Gemini(id="gemini-2.0-flash"),
     description="Compiles final investment insights into a structured report.",
     instructions=[
         "Integrate market analysis, company research, and strategy insights.",
