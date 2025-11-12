@@ -428,10 +428,11 @@ def compute_sector_exposure(symbols: list, weights: Dict[str, float] = None) -> 
         sector_weights[sector] = sector_weights.get(sector, 0.0) + weights.get(s, 0.0)
     return sector_weights
 
-def rolling_beta(asset_returns: pd.Series, benchmark_returns: pd.Series, window=63) -> pd.Series:
+def rolling_beta(asset_returns: pd.Series, benchmark_returns: pd.Series, window=63, symbol: str = "") -> pd.Series:
     """
     Compute rolling beta (OLS slope) between asset and benchmark returns.
     window: number of days (default 63 ≈ 3 months)
+    symbol: optional label for easier plotting
     """
     merged = pd.concat([asset_returns, benchmark_returns], axis=1).dropna()
     if merged.shape[0] < window:
@@ -439,11 +440,11 @@ def rolling_beta(asset_returns: pd.Series, benchmark_returns: pd.Series, window=
     a = merged.iloc[:, 0]
     b = merged.iloc[:, 1]
 
-    # Use rolling window covariance/variance directly
+    # Use rolling covariance/variance
     cov = a.rolling(window).cov(b)
     var = b.rolling(window).var()
     beta = cov / var
-    beta.name = f"rolling_beta_{window}d"
+    beta.name = f"{symbol}_rolling_beta_{window}d" if symbol else f"rolling_beta_{window}d"
     return beta
 
 
@@ -1457,14 +1458,26 @@ with tabs[3]:
                         st.plotly_chart(fig_dd, use_container_width=True)
 
             if do_rolling_beta and not bench_returns.empty:
-                st.markdown("**Rolling Beta (63-day)**")
-                for c in returns.columns:
-                    rb = rolling_beta(returns[c], bench_returns, window=63)
-                    if not rb.empty:
-                        fig_rb = go.Figure()
-                        fig_rb.add_trace(go.Scatter(x=rb.index, y=rb.values, mode="lines", name=f"{c} rolling beta"))
-                        fig_rb.update_layout(template="plotly_white", height=350)
-                        st.plotly_chart(fig_rb, use_container_width=True)
+    st.markdown("**Rolling Beta (63-day)**")
+    fig_rb_all = go.Figure()
+    for c in returns.columns:
+        rb = rolling_beta(returns[c], bench_returns, window=63, symbol=c)
+        if not rb.empty:
+            fig_rb_all.add_trace(go.Scatter(
+                x=rb.index,
+                y=rb.values,
+                mode="lines",
+                name=c,
+                line=dict(width=2)
+            ))
+    fig_rb_all.update_layout(
+        title=f"Rolling Beta (63-day) vs Benchmark ({benchmark})",
+        xaxis_title="Date",
+        yaxis_title="Beta",
+        template="plotly_white",
+        legend=dict(orientation="h", y=-0.2)
+    )
+    st.plotly_chart(fig_rb_all, use_container_width=True)
 
             if do_sector:
                 st.markdown("**Sector Exposure (approx via yfinance metadata)**")
