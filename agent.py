@@ -358,8 +358,6 @@ def interpret_user_query(query, symbols, close_df):
 
 # --------------------------- Streamlit UI --------------------------- #
 st.title("📊 AI Market Intelligence — Multi-Agent Decision Framework")
-st.markdown("Target audience: researchers, traders, asset managers, and risk managers.")
-
 # Sidebar
 st.sidebar.header("⚙️ Configuration")
 input_symbols = st.sidebar.text_input("Enter Stock Symbols (comma-separated)", "AAPL, TSLA, GOOG")
