@@ -1174,78 +1174,97 @@ tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlat
 # --- User Guide Tab ---
 with tabs[0]:
     st.markdown("""
-    Welcome to **AI Market Intelligence**, a multi-agent financial analysis system powered by Gemini AI.  
-    This platform helps you understand markets, companies, risks, and optimal portfolio allocations — even if you have **no prior finance background**.
+    Welcome to **AI Market Intelligence**, a multi-agent, benchmark-aware financial analytics system powered by **Gemini AI**.  
+    This app combines data science, econometrics, and explainable AI (XAI) to analyze **markets, companies, risk, and portfolios** — even if you’re new to finance.
 
     ---
     """)
 
     st.header("🎯 What This App Does")
     st.markdown("""
-    The app uses a set of specialized AI agents to analyze stocks, markets, and portfolios.  
-    Each agent focuses on one domain — quantitative metrics, company fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines them into a single benchmark-aware investment report.
+    The platform uses specialized **AI agents** that collaborate like a professional investment research team:
+    - Each agent handles a unique analytical domain.
+    - All results are **benchmark- and region-aware**.
+    - The **TeamLeadAgent** integrates insights into a unified, audit-ready investment report.
 
     **Here’s what happens when you run the full orchestration:**
-    - Data is downloaded from Yahoo Finance (prices, returns, volatility)
-    - News headlines are analyzed for tone and bias
-    - AI agents run independent analyses (Market, Risk, Sentiment, etc.)
-    - The TeamLeadAgent synthesizes all insights into a professional report
+    1. **Market & price data** are fetched from Yahoo Finance.
+    2. **News headlines** are analyzed for tone and sentiment.
+    3. **AI agents** run independently (Market, Company, Risk, Portfolio, etc.).
+    4. The **TeamLeadAgent** merges outputs into a professional institutional report.
+    5. Optional: Generate **PDF exports**, visualize **correlations, volatility, alpha**, and run **stress tests**.
+
+    ---
     """)
 
     st.subheader("👥 Agents and Their Roles")
     st.markdown("""
-    | Agent | Description | Output Example |
+    | Agent | Description | Example Insight |
     |--------|--------------|----------------|
-    | **MarketAnalystAgent** | Quantitative analyst — studies prices, trends, volatility, market regime. | “Market regime appears risk-on with tech outperforming.” |
-    | **CompanyResearchAgent** | Company fundamentals & financial health. | “AAPL has strong margins and stable earnings growth.” |
-    | **SentimentAgent** | Evaluates news tone and sentiment from headlines. | “Media sentiment mildly positive (+0.22).” |
-    | **RiskAnalystAgent** | Measures risk (VaR, drawdown, beta, correlation). | “TSLA shows high beta (1.4) and largest drawdown.” |
-    | **PortfolioStrategistAgent** | Suggests allocations (equal-weight, risk-parity, momentum-tilt). | “Allocate 40% AAPL, 35% GOOG, 25% TSLA.” |
-    | **TeamLeadAgent** | Integrates all insights into a detailed investment report. | “Portfolio outperformed S&P 500 with lower volatility.” |
-    """)
+    | **MarketAnalystAgent** | Quantitative analyst — studies prices, returns, volatility, and market regime trends. | “Market regime appears risk-on with momentum-driven rotation into tech.” |
+    | **CompanyResearchAgent** | Fundamental analyst — interprets financials, earnings, catalysts, and risks. | “AAPL shows strong cash flow and resilient margins despite FX headwinds.” |
+    | **SentimentAgent** | Behavioral analyst — evaluates tone and bias in financial news. | “Sentiment score +0.28; positive tone following earnings beat.” |
+    | **RiskAnalystAgent** | Quant + risk expert — measures VaR, drawdown, beta, tracking error, and tail risk. | “TSLA: High beta (1.45), CVaR -3.8%, tracking error 6.2%.” |
+    | **PortfolioStrategistAgent** | Portfolio manager — designs optimal allocations (equal-weight, risk-parity, momentum tilt). | “Rebalance quarterly; overweight growth sectors, underweight cyclicals.” |
+    | **TeamLeadAgent** | Integrator — compiles all agent outputs into one cohesive benchmark-aware market report. | “Portfolio alpha +2.1% vs S&P 500; stable Sortino ratio 1.35.” |
 
-    st.markdown("---")
+    ---
+    """)
 
     st.header("⚙️ How to Use the App")
     st.markdown("""
-    1. **Enter stock symbols** in the sidebar — e.g.:
-       - `AAPL` (Apple)
-       - `TSLA` (Tesla)
-       - `GOOG` (Alphabet/Google)
-       - You can enter multiple tickers separated by commas.
-    2. **Select a benchmark** — a market index to compare performance against:
-       - Default: `^GSPC` → S&P 500 (broad U.S. market)
-       - Others: `^DJI` (Dow Jones), `^NDX` (Nasdaq 100), `^IXIC` (Nasdaq Composite)
-    3. **Explore Tabs:**
-       - **Overview:** Historical prices & MarketAnalystAgent.
-       - **Company Deep Dives:** Company research & sentiment.
-       - **Risk & Correlation:** Risk metrics, drawdown, volatility heatmaps.
-       - **Portfolio Strategist:** Allocation recommendations.
-       - **Chat Assistant:** Ask natural language queries.
-       - **Audit & Exports:** Generate benchmark-aware reports.
+    1. **Select a Country/Region** in the sidebar.  
+       - Benchmarks and exchange suffixes are automatically configured (e.g., `.NS` for India, `.L` for UK).  
+    2. **Enter stock symbols** — e.g.:
+       - `AAPL`, `TSLA`, `GOOG` for the U.S.
+       - `INFY`, `TCS.NS`, `RELIANCE.NS` for India
+    3. **Choose a benchmark** (e.g., `^GSPC`, `^N225`, `^BSESN`).
+    4. **Explore the tabs:**
+       - **Overview:** Charts + MarketAnalystAgent insights  
+       - **Company Deep Dives:** Fundamental & sentiment analysis per firm  
+       - **Risk & Correlation:** Volatility, drawdown, correlation, and advanced metrics  
+       - **Portfolio Strategist:** Allocation and optimization proposals  
+       - **Chat Assistant:** Ask natural-language questions  
+       - **Audit & Exports:** Full benchmark-aware report generation
     """)
 
     st.markdown("---")
 
-    st.header("💬 Key Financial Terminologies (Plain English Guide)")
+    st.header("🧮 Advanced Quantitative Analytics")
     st.markdown("""
-    ### 🔢 Stock Market Basics
-    - **Stock / Equity:** Ownership share in a company.
-    - **Ticker Symbol:** Short code to identify a stock (e.g., `AAPL` = Apple).
-    - **Index / Benchmark:** A collection of stocks used to represent the market (e.g., S&P 500).
-    - **ETF (Exchange-Traded Fund):** A fund that tracks an index (like `SPY` for S&P 500).
-    - **Price:** The latest traded value of a stock.
-    - **Return:** The percentage change in price over a period.
+    The **Risk & Correlation** tab now includes advanced analytics used by institutional quants:
 
-    ### 📊 Market & Performance Metrics
-    - **Volatility:** How much prices fluctuate. High = risky, Low = stable.
-    - **Standard Deviation:** The math measure behind volatility.
-    - **Drawdown:** The percentage fall from a recent peak — measures loss severity.
-    - **Beta (β):** Sensitivity to market moves. β > 1 = more volatile than market, β < 1 = less volatile.
-    - **Alpha (α):** Return in excess of the benchmark.
-    - **Sharpe Ratio:** Risk-adjusted performance = (Return - Risk-free rate) / Volatility.
-    - **VaR (Value at Risk):** Worst expected loss (e.g., “5% VaR = can lose 3% or more 5% of the time”).
-    - **Max Drawdown:** Largest observed drop in value — a stress test of performance.
+    | Metric | Description | Interpretation |
+    |----------|-------------|----------------|
+    | **Alpha (α)** | Excess return vs benchmark after adjusting for beta. | Positive alpha = outperformance. |
+    | **Beta (β)** | Sensitivity to benchmark moves. | β > 1 → more volatile than benchmark. |
+    | **Tracking Error** | Std. deviation of excess returns. | High = active deviation from index. |
+    | **Sortino Ratio** | Return per unit of downside risk. | Better for asymmetric risk profiles. |
+    | **CVaR (Expected Shortfall)** | Tail loss beyond VaR threshold. | Measures average of worst losses. |
+    | **Rolling Beta** | 63-day beta over time. | Shows stability or volatility of correlation. |
+    | **Drawdown Chart** | Visualizes largest price declines vs peaks. | Reveals historical stress points. |
+    | **Stress Tests** | Simulate -10% shocks and past crisis periods. | Estimates impact on each stock. |
+    | **Sector Exposure** | Aggregate portfolio weight by sector. | Shows diversification & concentration. |
+
+    These metrics are computed live and also fed into the **RiskAnalystAgent** for contextual reasoning.
+    """)
+
+    st.markdown("---")
+
+    st.header("💬 Key Financial & Risk Terminology (Simplified)")
+    st.markdown("""
+    ### 📊 Market & Risk Terms
+    - **Volatility (σ):** How much prices move; higher = riskier.  
+    - **Max Drawdown:** Largest peak-to-trough loss — stress indicator.  
+    - **VaR (Value at Risk):** Worst expected loss with a given confidence level.  
+    - **CVaR (Expected Shortfall):** Average of losses worse than VaR.  
+    - **Alpha (α):** Outperformance after risk adjustment.  
+    - **Beta (β):** Benchmark sensitivity.  
+    - **Tracking Error:** How much the portfolio deviates from benchmark returns.  
+    - **Sortino Ratio:** Reward per unit of downside risk.  
+    - **Correlation:** Degree of co-movement between assets.  
+    - **Stress Test:** Scenario analysis simulating market shocks.  
+    - **Risk-on / Risk-off:** Market preference for risky vs safe assets.
 
     ### 💰 Company & Fundamental Terms
     - **Market Cap:** Total company value = price × shares outstanding.
@@ -1257,12 +1276,6 @@ with tabs[0]:
     - **Debt-to-Equity Ratio:** Measures leverage (how much debt the company has).
     - **Dividend Yield:** Annual dividend / price — investor income measure.
 
-    ### 💬 Behavioral & Sentiment Terms
-    - **Market Sentiment:** Overall tone (bullish = optimistic, bearish = pessimistic).
-    - **Headline Sentiment:** News tone score from -1 (negative) to +1 (positive).
-    - **Catalyst:** Event that might move prices (e.g., earnings release, product launch).
-    - **Momentum:** Recent trend strength — stocks going up tend to keep rising (short term).
-
     ### ⚖️ Portfolio & Risk Terms
     - **Diversification:** Holding different assets to reduce risk.
     - **Correlation:** How assets move relative to each other (-1 = opposite, +1 = together).
@@ -1273,20 +1286,6 @@ with tabs[0]:
     - **Tracking Error:** How much a portfolio deviates from its benchmark.
     - **Benchmark-relative Return:** Outperformance or underperformance vs. the benchmark.
 
-    ### 🏦 Economic & Market Context
-    - **Risk-on Environment:** Investors prefer stocks and higher risk assets.
-    - **Risk-off Environment:** Investors seek safety (bonds, gold, cash).
-    - **Interest Rates:** Cost of borrowing money — affects valuations.
-    - **Inflation:** Rate at which prices increase — reduces purchasing power.
-    - **Yield Curve:** Shows interest rates for bonds of different maturities.
-    - **Recession:** Period of declining economic activity.
-    - **Market Regime:** Overall condition of market (bullish, bearish, volatile, stable).
-
-    ### 🧠 AI & Analytical Concepts
-    - **Agent:** An autonomous AI process that performs a specific analytical role.
-    - **Multi-Agent System:** Several AI agents collaborating — like departments in a research team.
-    - **Prompt:** The instructions given to each AI model (e.g., “Analyze volatility trends”).
-    - **Explainability (XAI):** Making AI reasoning transparent and auditable.
     """)
 
     st.markdown("---")
@@ -1301,7 +1300,7 @@ with tabs[0]:
     | **Market & Benchmark Overview** | Context on how markets and your stocks performed vs benchmark. |
     | **Company Deep Dives** | Company fundamentals and financial analysis. |
     | **Sentiment Insights** | News tone and behavioral signals. |
-    | **Risk Assessment** | VaR, drawdown, volatility, and correlation results. |
+    | **Risk Assessment** | Includes VaR, CVaR, Sortino, Tracking Error, and correlation context. |
     | **Portfolio Strategy** | AI’s allocation recommendation with rationale. |
     | **Recommendations** | Actionable buy/hold/sell or weighting guidance. |
     | **Audit Trail** | Lists which AI agent produced which section. |
@@ -1312,29 +1311,35 @@ with tabs[0]:
 
     st.markdown("---")
 
-    st.header("🔍 Examples of Benchmarks You Can Use")
+    st.header("🔍 Global Benchmarks Supported")
     st.markdown("""
-    - `^GSPC` — S&P 500 (broad U.S. market)  
-    - `^DJI` — Dow Jones Industrial Average  
-    - `^NDX` — Nasdaq 100 (tech-heavy)  
-    - `^IXIC` — Nasdaq Composite  
-    - `^RUT` — Russell 2000 (small caps)  
-    - `^FTSE` — UK FTSE 100  
-    - `^N225` — Nikkei 225 (Japan)  
-    - `^HSI` — Hang Seng Index (Hong Kong)  
-    - `^STOXX50E` — Euro Stoxx 50 (Europe)
+    This app supports **40+ countries and regions**, each mapped to appropriate market benchmarks and exchange suffixes.
+
+    | Region | Example Benchmarks | Suffix |
+    |---------|-------------------|--------|
+    | 🇺🇸 United States | S&P 500 (^GSPC), Nasdaq 100 (^NDX), Dow Jones (^DJI) | — |
+    | 🇮🇳 India | BSE Sensex (^BSESN), Nifty 50 (^NSEI) | .NS / .BO |
+    | 🇬🇧 UK | FTSE 100 (^FTSE), FTSE 250 (^FTMC) | .L |
+    | 🇯🇵 Japan | Nikkei 225 (^N225), TOPIX (^TOPX) | .T |
+    | 🇨🇦 Canada | S&P/TSX Composite (^GSPTSE) | .TO |
+    | 🇭🇰 Hong Kong | Hang Seng (^HSI), HSTECH (^HSTECH) | .HK |
+    | 🇪🇺 Europe | STOXX 50 (^STOXX50E), DAX (^GDAXI), CAC 40 (^FCHI) | — |
+    | 🇧🇷 Brazil | Ibovespa (^BVSP) | .SA |
+    | 🇸🇬 Singapore | Straits Times (^STI) | .SI |
+    | 🇦🇺 Australia | ASX 200 (^AXJO) | .AX |
+
+    (Additional support for emerging markets like South Africa, Saudi Arabia, Mexico, etc.)
     """)
 
     st.markdown("---")
-
     st.header("🧠 AI Model Notes")
     st.markdown("""
-    - The app uses **Google Gemini 2.0** models for reasoning.  
-    - Each agent uses tailored prompts to focus on its domain.
-    - The **TeamLeadAgent** merges analyses into a human-readable markdown report.
-    - All outputs are auditable — sections are labeled by the agent that created them.
+    - Uses **Google Gemini 2.0 Flash** for reasoning and report synthesis.  
+    - Each agent operates independently and contextually.  
+    - The **RiskAnalystAgent** now integrates advanced metrics like Alpha, CVaR, Sortino, and Stress Tests.  
+    - The **TeamLeadAgent** merges all outputs into a coherent institutional report.  
+    - All sections are benchmark-aware and traceable to their AI source.  
     """)
-
     st.markdown("---")
 
     st.header("💡 Tips for Beginners")
