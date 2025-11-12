@@ -23,6 +23,7 @@ st.set_page_config(page_title="AI Market Intelligence (Multi-Agent)", page_icon=
 
 # --------------------------- Country and Benchmark Mapping --------------------------- #
 COUNTRY_BENCHMARKS = {
+    # --- North America ---
     "United States": {
         "default": "^GSPC",
         "region": "US",
@@ -31,25 +32,136 @@ COUNTRY_BENCHMARKS = {
             "S&P 500": {"ticker": "^GSPC", "exchange_suffix": ""},
             "Dow Jones Industrial Average": {"ticker": "^DJI", "exchange_suffix": ""},
             "Nasdaq 100": {"ticker": "^NDX", "exchange_suffix": ""},
-            "Russell 2000": {"ticker": "^RUT", "exchange_suffix": ""}
+            "Russell 2000": {"ticker": "^RUT", "exchange_suffix": ""},
+            "Nasdaq Composite": {"ticker": "^IXIC", "exchange_suffix": ""}
         }
     },
-    "India": {
-        "default": "^BSESN",
-        "region": "IN",
-        "lang": "en-IN",
+    "Canada": {
+        "default": "^GSPTSE",
+        "region": "CA",
+        "lang": "en-CA",
         "benchmarks": {
-            "BSE Sensex": {"ticker": "^BSESN", "exchange_suffix": ".BO"},
-            "Nifty 50": {"ticker": "^NSEI", "exchange_suffix": ".NS"}
+            "S&P/TSX Composite": {"ticker": "^GSPTSE", "exchange_suffix": ".TO"},
+            "S&P/TSX 60": {"ticker": "^TX60", "exchange_suffix": ".TO"}
         }
     },
+
+    # --- Latin America ---
+    "Brazil": {
+        "default": "^BVSP",
+        "region": "BR",
+        "lang": "pt-BR",
+        "benchmarks": {
+            "Bovespa Index (Ibovespa)": {"ticker": "^BVSP", "exchange_suffix": ".SA"},
+            "IBrX 50": {"ticker": "^IBX50", "exchange_suffix": ".SA"}
+        }
+    },
+    "Mexico": {
+        "default": "^MXX",
+        "region": "MX",
+        "lang": "es-MX",
+        "benchmarks": {
+            "IPC (Bolsa Index)": {"ticker": "^MXX", "exchange_suffix": ".MX"}
+        }
+    },
+    "Argentina": {
+        "default": "^MERV",
+        "region": "AR",
+        "lang": "es-AR",
+        "benchmarks": {
+            "MERVAL": {"ticker": "^MERV", "exchange_suffix": ".BA"}
+        }
+    },
+
+    # --- Europe ---
     "United Kingdom": {
         "default": "^FTSE",
         "region": "UK",
         "lang": "en-GB",
         "benchmarks": {
             "FTSE 100": {"ticker": "^FTSE", "exchange_suffix": ".L"},
-            "FTSE 250": {"ticker": "^FTMC", "exchange_suffix": ".L"}
+            "FTSE 250": {"ticker": "^FTMC", "exchange_suffix": ".L"},
+            "FTSE All-Share": {"ticker": "^FTAS", "exchange_suffix": ".L"}
+        }
+    },
+    "Germany": {
+        "default": "^GDAXI",
+        "region": "DE",
+        "lang": "de-DE",
+        "benchmarks": {
+            "DAX": {"ticker": "^GDAXI", "exchange_suffix": ".DE"},
+            "MDAX": {"ticker": "^MDAXI", "exchange_suffix": ".DE"},
+            "TecDAX": {"ticker": "^TECDAX", "exchange_suffix": ".DE"}
+        }
+    },
+    "France": {
+        "default": "^FCHI",
+        "region": "FR",
+        "lang": "fr-FR",
+        "benchmarks": {
+            "CAC 40": {"ticker": "^FCHI", "exchange_suffix": ".PA"},
+            "SBF 120": {"ticker": "^SBF120", "exchange_suffix": ".PA"}
+        }
+    },
+    "Italy": {
+        "default": "^FTSEMIB",
+        "region": "IT",
+        "lang": "it-IT",
+        "benchmarks": {
+            "FTSE MIB": {"ticker": "^FTSEMIB", "exchange_suffix": ".MI"}
+        }
+    },
+    "Spain": {
+        "default": "^IBEX",
+        "region": "ES",
+        "lang": "es-ES",
+        "benchmarks": {
+            "IBEX 35": {"ticker": "^IBEX", "exchange_suffix": ".MC"}
+        }
+    },
+    "Switzerland": {
+        "default": "^SSMI",
+        "region": "CH",
+        "lang": "de-CH",
+        "benchmarks": {
+            "SMI (Swiss Market Index)": {"ticker": "^SSMI", "exchange_suffix": ".SW"}
+        }
+    },
+    "Netherlands": {
+        "default": "^AEX",
+        "region": "NL",
+        "lang": "nl-NL",
+        "benchmarks": {
+            "AEX": {"ticker": "^AEX", "exchange_suffix": ".AS"}
+        }
+    },
+    "Sweden": {
+        "default": "^OMXS30",
+        "region": "SE",
+        "lang": "sv-SE",
+        "benchmarks": {
+            "OMX Stockholm 30": {"ticker": "^OMXS30", "exchange_suffix": ".ST"}
+        }
+    },
+    "Europe (Overall)": {
+        "default": "^STOXX50E",
+        "region": "EU",
+        "lang": "en-EU",
+        "benchmarks": {
+            "Euro Stoxx 50": {"ticker": "^STOXX50E", "exchange_suffix": ""},
+            "STOXX Europe 600": {"ticker": "^STOXX", "exchange_suffix": ""}
+        }
+    },
+
+    # --- Asia ---
+    "India": {
+        "default": "^BSESN",
+        "region": "IN",
+        "lang": "en-IN",
+        "benchmarks": {
+            "BSE Sensex": {"ticker": "^BSESN", "exchange_suffix": ".BO"},
+            "Nifty 50": {"ticker": "^NSEI", "exchange_suffix": ".NS"},
+            "Nifty Bank": {"ticker": "^NSEBANK", "exchange_suffix": ".NS"}
         }
     },
     "Japan": {
@@ -61,20 +173,14 @@ COUNTRY_BENCHMARKS = {
             "TOPIX": {"ticker": "^TOPX", "exchange_suffix": ".T"}
         }
     },
-    "Canada": {
-        "default": "^GSPTSE",
-        "region": "CA",
-        "lang": "en-CA",
+    "China": {
+        "default": "000001.SS",
+        "region": "CN",
+        "lang": "zh-CN",
         "benchmarks": {
-            "S&P/TSX Composite": {"ticker": "^GSPTSE", "exchange_suffix": ".TO"}
-        }
-    },
-    "Australia": {
-        "default": "^AXJO",
-        "region": "AU",
-        "lang": "en-AU",
-        "benchmarks": {
-            "ASX 200": {"ticker": "^AXJO", "exchange_suffix": ".AX"}
+            "SSE Composite Index": {"ticker": "000001.SS", "exchange_suffix": ".SS"},
+            "CSI 300": {"ticker": "000300.SS", "exchange_suffix": ".SS"},
+            "SZSE Component Index": {"ticker": "399001.SZ", "exchange_suffix": ".SZ"}
         }
     },
     "Hong Kong": {
@@ -82,19 +188,82 @@ COUNTRY_BENCHMARKS = {
         "region": "HK",
         "lang": "zh-HK",
         "benchmarks": {
-            "Hang Seng Index": {"ticker": "^HSI", "exchange_suffix": ".HK"}
+            "Hang Seng Index": {"ticker": "^HSI", "exchange_suffix": ".HK"},
+            "Hang Seng Tech Index": {"ticker": "^HSTECH", "exchange_suffix": ".HK"}
         }
     },
-    "Europe": {
-        "default": "^STOXX50E",
-        "region": "EU",
-        "lang": "en-EU",
+    "South Korea": {
+        "default": "^KS11",
+        "region": "KR",
+        "lang": "ko-KR",
         "benchmarks": {
-            "Euro Stoxx 50": {"ticker": "^STOXX50E", "exchange_suffix": ""},
-            "DAX (Germany)": {"ticker": "^GDAXI", "exchange_suffix": ""},
-            "CAC 40 (France)": {"ticker": "^FCHI", "exchange_suffix": ""}
+            "KOSPI Composite": {"ticker": "^KS11", "exchange_suffix": ".KS"},
+            "KOSDAQ": {"ticker": "^KQ11", "exchange_suffix": ".KQ"}
         }
-    }
+    },
+    "Taiwan": {
+        "default": "^TWII",
+        "region": "TW",
+        "lang": "zh-TW",
+        "benchmarks": {
+            "TAIEX": {"ticker": "^TWII", "exchange_suffix": ".TW"}
+        }
+    },
+    "Singapore": {
+        "default": "^STI",
+        "region": "SG",
+        "lang": "en-SG",
+        "benchmarks": {
+            "Straits Times Index": {"ticker": "^STI", "exchange_suffix": ".SI"}
+        }
+    },
+    "Australia": {
+        "default": "^AXJO",
+        "region": "AU",
+        "lang": "en-AU",
+        "benchmarks": {
+            "ASX 200": {"ticker": "^AXJO", "exchange_suffix": ".AX"},
+            "All Ordinaries": {"ticker": "^AORD", "exchange_suffix": ".AX"}
+        }
+    },
+
+    # --- Middle East ---
+    "Saudi Arabia": {
+        "default": "^TASI",
+        "region": "SA",
+        "lang": "ar-SA",
+        "benchmarks": {
+            "Tadawul All Share Index": {"ticker": "^TASI", "exchange_suffix": ".SA"}
+        }
+    },
+    "United Arab Emirates": {
+        "default": "^DFMGI",
+        "region": "AE",
+        "lang": "ar-AE",
+        "benchmarks": {
+            "DFM General Index (Dubai)": {"ticker": "^DFMGI", "exchange_suffix": ".DU"},
+            "ADX General (Abu Dhabi)": {"ticker": "^ADI", "exchange_suffix": ".AD"}
+        }
+    },
+    "Qatar": {
+        "default": "^QSI",
+        "region": "QA",
+        "lang": "ar-QA",
+        "benchmarks": {
+            "QE General": {"ticker": "^QSI", "exchange_suffix": ".QA"}
+        }
+    },
+
+    # --- Africa ---
+    "South Africa": {
+        "default": "^J203",
+        "region": "ZA",
+        "lang": "en-ZA",
+        "benchmarks": {
+            "FTSE/JSE Top 40": {"ticker": "^J200", "exchange_suffix": ".JO"},
+            "FTSE/JSE All Share": {"ticker": "^J203", "exchange_suffix": ".JO"}
+        }
+    },
 }
 
 
