@@ -553,10 +553,192 @@ if api_key:
 elif api_key_env:
     os.environ["GOOGLE_API_KEY"] = api_key_env
 
-tabs = st.tabs(["Overview", "Company Deep Dives", "Risk & Correlation", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
+tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlation", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
+
+# --- User Guide Tab ---
+with tabs[0]:
+    st.title("📘 AI Market Intelligence — Comprehensive User Guide")
+    st.markdown("""
+    Welcome to **AI Market Intelligence**, a multi-agent financial analysis system powered by Gemini AI.  
+    This platform helps you understand markets, companies, risks, and optimal portfolio allocations — even if you have **no prior finance background**.
+
+    ---
+    """)
+
+    st.header("🎯 What This App Does")
+    st.markdown("""
+    The app uses a set of specialized AI agents to analyze stocks, markets, and portfolios.  
+    Each agent focuses on one domain — quantitative metrics, company fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines them into a single benchmark-aware investment report.
+
+    **Here’s what happens when you run the full orchestration:**
+    - Data is downloaded from Yahoo Finance (prices, returns, volatility)
+    - News headlines are analyzed for tone and bias
+    - AI agents run independent analyses (Market, Risk, Sentiment, etc.)
+    - The TeamLeadAgent synthesizes all insights into a professional report
+    """)
+
+    st.subheader("👥 Agents and Their Roles")
+    st.markdown("""
+    | Agent | Description | Output Example |
+    |--------|--------------|----------------|
+    | **MarketAnalystAgent** | Quantitative analyst — studies prices, trends, volatility, market regime. | “Market regime appears risk-on with tech outperforming.” |
+    | **CompanyResearchAgent** | Company fundamentals & financial health. | “AAPL has strong margins and stable earnings growth.” |
+    | **SentimentAgent** | Evaluates news tone and sentiment from headlines. | “Media sentiment mildly positive (+0.22).” |
+    | **RiskAnalystAgent** | Measures risk (VaR, drawdown, beta, correlation). | “TSLA shows high beta (1.4) and largest drawdown.” |
+    | **PortfolioStrategistAgent** | Suggests allocations (equal-weight, risk-parity, momentum-tilt). | “Allocate 40% AAPL, 35% GOOG, 25% TSLA.” |
+    | **TeamLeadAgent** | Integrates all insights into a detailed investment report. | “Portfolio outperformed S&P 500 with lower volatility.” |
+    """)
+
+    st.markdown("---")
+
+    st.header("⚙️ How to Use the App")
+    st.markdown("""
+    1. **Enter stock symbols** in the sidebar — e.g.:
+       - `AAPL` (Apple)
+       - `TSLA` (Tesla)
+       - `GOOG` (Alphabet/Google)
+       - You can enter multiple tickers separated by commas.
+    2. **Select a benchmark** — a market index to compare performance against:
+       - Default: `^GSPC` → S&P 500 (broad U.S. market)
+       - Others: `^DJI` (Dow Jones), `^NDX` (Nasdaq 100), `^IXIC` (Nasdaq Composite)
+    3. **Explore Tabs:**
+       - **Overview:** Historical prices & MarketAnalystAgent.
+       - **Company Deep Dives:** Company research & sentiment.
+       - **Risk & Correlation:** Risk metrics, drawdown, volatility heatmaps.
+       - **Portfolio Strategist:** Allocation recommendations.
+       - **Chat Assistant:** Ask natural language queries.
+       - **Audit & Exports:** Generate benchmark-aware reports.
+    """)
+
+    st.markdown("---")
+
+    st.header("💬 Key Financial Terminologies (Plain English Guide)")
+    st.markdown("""
+    ### 🔢 Stock Market Basics
+    - **Stock / Equity:** Ownership share in a company.
+    - **Ticker Symbol:** Short code to identify a stock (e.g., `AAPL` = Apple).
+    - **Index / Benchmark:** A collection of stocks used to represent the market (e.g., S&P 500).
+    - **ETF (Exchange-Traded Fund):** A fund that tracks an index (like `SPY` for S&P 500).
+    - **Price:** The latest traded value of a stock.
+    - **Return:** The percentage change in price over a period.
+
+    ### 📊 Market & Performance Metrics
+    - **Volatility:** How much prices fluctuate. High = risky, Low = stable.
+    - **Standard Deviation:** The math measure behind volatility.
+    - **Drawdown:** The percentage fall from a recent peak — measures loss severity.
+    - **Beta (β):** Sensitivity to market moves. β > 1 = more volatile than market, β < 1 = less volatile.
+    - **Alpha (α):** Return in excess of the benchmark.
+    - **Sharpe Ratio:** Risk-adjusted performance = (Return - Risk-free rate) / Volatility.
+    - **VaR (Value at Risk):** Worst expected loss (e.g., “5% VaR = can lose 3% or more 5% of the time”).
+    - **Max Drawdown:** Largest observed drop in value — a stress test of performance.
+
+    ### 💰 Company & Fundamental Terms
+    - **Market Cap:** Total company value = price × shares outstanding.
+    - **Earnings Per Share (EPS):** Profit per share — measures profitability.
+    - **P/E Ratio (Price-to-Earnings):** Valuation measure. High P/E → expensive stock.
+    - **Revenue Growth:** Increase in company sales over time.
+    - **Margins:** How much profit is kept from each dollar of sales.
+    - **Cash Flow:** Real cash generated — shows business strength.
+    - **Debt-to-Equity Ratio:** Measures leverage (how much debt the company has).
+    - **Dividend Yield:** Annual dividend / price — investor income measure.
+
+    ### 💬 Behavioral & Sentiment Terms
+    - **Market Sentiment:** Overall tone (bullish = optimistic, bearish = pessimistic).
+    - **Headline Sentiment:** News tone score from -1 (negative) to +1 (positive).
+    - **Catalyst:** Event that might move prices (e.g., earnings release, product launch).
+    - **Momentum:** Recent trend strength — stocks going up tend to keep rising (short term).
+
+    ### ⚖️ Portfolio & Risk Terms
+    - **Diversification:** Holding different assets to reduce risk.
+    - **Correlation:** How assets move relative to each other (-1 = opposite, +1 = together).
+    - **Risk Parity:** Balancing portfolio risk by inverse volatility.
+    - **Equal Weight:** Every stock gets the same percentage.
+    - **Momentum Tilt:** Overweight stocks that are trending upward.
+    - **Hedging:** Using offsetting assets to protect against loss.
+    - **Tracking Error:** How much a portfolio deviates from its benchmark.
+    - **Benchmark-relative Return:** Outperformance or underperformance vs. the benchmark.
+
+    ### 🏦 Economic & Market Context
+    - **Risk-on Environment:** Investors prefer stocks and higher risk assets.
+    - **Risk-off Environment:** Investors seek safety (bonds, gold, cash).
+    - **Interest Rates:** Cost of borrowing money — affects valuations.
+    - **Inflation:** Rate at which prices increase — reduces purchasing power.
+    - **Yield Curve:** Shows interest rates for bonds of different maturities.
+    - **Recession:** Period of declining economic activity.
+    - **Market Regime:** Overall condition of market (bullish, bearish, volatile, stable).
+
+    ### 🧠 AI & Analytical Concepts
+    - **Agent:** An autonomous AI process that performs a specific analytical role.
+    - **Multi-Agent System:** Several AI agents collaborating — like departments in a research team.
+    - **Prompt:** The instructions given to each AI model (e.g., “Analyze volatility trends”).
+    - **Explainability (XAI):** Making AI reasoning transparent and auditable.
+    """)
+
+    st.markdown("---")
+
+    st.header("📘 How to Interpret AI Reports")
+    st.markdown("""
+    Every report includes structured sections for clarity:
+
+    | Section | What It Means |
+    |----------|---------------|
+    | **Executive Summary** | High-level overview — performance, tone, and trends. |
+    | **Market & Benchmark Overview** | Context on how markets and your stocks performed vs benchmark. |
+    | **Company Deep Dives** | Company fundamentals and financial analysis. |
+    | **Sentiment Insights** | News tone and behavioral signals. |
+    | **Risk Assessment** | VaR, drawdown, volatility, and correlation results. |
+    | **Portfolio Strategy** | AI’s allocation recommendation with rationale. |
+    | **Recommendations** | Actionable buy/hold/sell or weighting guidance. |
+    | **Audit Trail** | Lists which AI agent produced which section. |
+
+    Each **Rationale** section explains *why* the recommendation was made.  
+    Each **Recommendation** tells you *what* to do (e.g., overweight, hold, reduce exposure).
+    """)
+
+    st.markdown("---")
+
+    st.header("🔍 Examples of Benchmarks You Can Use")
+    st.markdown("""
+    - `^GSPC` — S&P 500 (broad U.S. market)  
+    - `^DJI` — Dow Jones Industrial Average  
+    - `^NDX` — Nasdaq 100 (tech-heavy)  
+    - `^IXIC` — Nasdaq Composite  
+    - `^RUT` — Russell 2000 (small caps)  
+    - `^FTSE` — UK FTSE 100  
+    - `^N225` — Nikkei 225 (Japan)  
+    - `^HSI` — Hang Seng Index (Hong Kong)  
+    - `^STOXX50E` — Euro Stoxx 50 (Europe)
+    """)
+
+    st.markdown("---")
+
+    st.header("🧠 AI Model Notes")
+    st.markdown("""
+    - The app uses **Google Gemini 2.0** models for reasoning.  
+    - Each agent uses tailored prompts to focus on its domain.
+    - The **TeamLeadAgent** merges analyses into a human-readable markdown report.
+    - All outputs are auditable — sections are labeled by the agent that created them.
+    """)
+
+    st.markdown("---")
+
+    st.header("💡 Tips for Beginners")
+    st.markdown("""
+    - Hover over terms or open this guide if you’re unsure about terminology.  
+    - Start with **one stock** and learn how each agent’s report changes.  
+    - Compare your stock to benchmarks like `^GSPC` or `^NDX` to understand context.  
+    - Use the **Chat Assistant** tab to ask things like:
+      - “What is volatility?”
+      - “How has AAPL’s performance compared to the S&P 500?”
+      - “Which stock has the lowest drawdown?”
+    - You can generate **short** or **detailed** reports — both are benchmark-aware.
+    """)
+
+    st.success("✅ You’re all set! Start with the 'Overview' tab to explore your first analysis.")
+
 
 # --- Overview Tab ---
-with tabs[0]:
+with tabs[1]:
     st.header("Market Overview & Quick Analysis")
     period = st.selectbox("Historical period for charts:", ["6mo", "1y", "2y"], index=1)
     close_df = download_close_prices(symbols, period=period)
@@ -577,7 +759,7 @@ with tabs[0]:
                 st.markdown(market_analysis_text)
 
 # --- Company Deep Dives ---
-with tabs[1]:
+with tabs[2]:
     st.header("Company Deep Dives")
     for s in symbols:
         with st.expander(f"{s} — Summary & Research"):
@@ -613,7 +795,7 @@ with tabs[1]:
                 st.info("No recent news headlines found for this company.")
 
 # --- Risk & Correlation Tab ---
-with tabs[2]:
+with tabs[3]:
     st.header("Risk Metrics & Correlation")
     close_df_risk = download_close_prices(symbols, period="1y")
     if close_df_risk.empty:
@@ -644,7 +826,7 @@ with tabs[2]:
         st.plotly_chart(fig_vol, use_container_width=True, key=f"rolling_vol_{'_'.join(symbols)}")  # ✅ FIXED
 
 # --- Portfolio Strategist Tab ---
-with tabs[3]:
+with tabs[4]:
     st.header("Portfolio Strategist — Allocation Proposals")
     close_df_port = download_close_prices(symbols, period="1y")
     constraints_raw = st.text_input("Constraints (json) e.g. {'max_weight':0.4}", "")
@@ -659,7 +841,7 @@ with tabs[3]:
             st.markdown(strategy_text)
 
 # --- Chat Assistant Tab ---
-with tabs[4]:
+with tabs[5]:
     st.header("Natural Language Research Assistant")
     st.markdown("Ask the system — it will route to an appropriate agent and return text + visuals when applicable.")
     user_query = st.text_input("Enter your question (e.g., 'Show me volatility trends for the S&P 500 in the last year')", "")
@@ -687,7 +869,7 @@ with tabs[4]:
                             st.markdown(text)
 
 # --- Audit & Exports Tab ---
-with tabs[5]:
+with tabs[6]:
     st.header("Audit Trail & Report Generation")
     st.markdown("Run all agents together, integrate results, and generate a benchmark-aware TeamLead report.")
 
