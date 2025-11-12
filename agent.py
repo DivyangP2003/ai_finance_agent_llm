@@ -1458,26 +1458,26 @@ with tabs[3]:
                         st.plotly_chart(fig_dd, use_container_width=True)
 
             if do_rolling_beta and not bench_returns.empty:
-    st.markdown("**Rolling Beta (63-day)**")
-    fig_rb_all = go.Figure()
-    for c in returns.columns:
-        rb = rolling_beta(returns[c], bench_returns, window=63, symbol=c)
-        if not rb.empty:
-            fig_rb_all.add_trace(go.Scatter(
-                x=rb.index,
-                y=rb.values,
-                mode="lines",
-                name=c,
-                line=dict(width=2)
-            ))
-    fig_rb_all.update_layout(
-        title=f"Rolling Beta (63-day) vs Benchmark ({benchmark})",
-        xaxis_title="Date",
-        yaxis_title="Beta",
-        template="plotly_white",
-        legend=dict(orientation="h", y=-0.2)
-    )
-    st.plotly_chart(fig_rb_all, use_container_width=True)
+                st.markdown("**Rolling Beta (63-day)**")
+                fig_rb_all = go.Figure()
+                for c in returns.columns:
+                    rb = rolling_beta(returns[c], bench_returns, window=63, symbol=c)
+                    if not rb.empty:
+                        fig_rb_all.add_trace(go.Scatter(
+                            x=rb.index,
+                            y=rb.values,
+                            mode="lines",
+                            name=c,
+                            line=dict(width=2)
+                        ))
+                fig_rb_all.update_layout(
+                    title=f"Rolling Beta (63-day) vs Benchmark ({benchmark})",
+                    xaxis_title="Date",
+                    yaxis_title="Beta",
+                    template="plotly_white",
+                    legend=dict(orientation="h", y=-0.2)
+                )
+                st.plotly_chart(fig_rb_all, use_container_width=True)
 
             if do_sector:
                 st.markdown("**Sector Exposure (approx via yfinance metadata)**")
