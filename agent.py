@@ -8,7 +8,7 @@ import yfinance as yf
 import streamlit as st
 import plotly.graph_objects as go
 from dotenv import load_dotenv
-
+import feedparser
 # --- AI agent imports ---
 from agno.agent import Agent
 from agno.models.google import Gemini
@@ -41,20 +41,25 @@ def fetch_ticker_info(symbol):
 
 @st.cache_data(ttl=60 * 10)
 def fetch_news(symbol, limit=10):
-    t = yf.Ticker(symbol)
+    """
+    Fetch recent Yahoo Finance news headlines via RSS feed fallback.
+    Works even if yfinance's .news endpoint is broken.
+    """
     try:
-        news = t.news[:limit]
-    except Exception:
-        news = []
-    processed = []
-    for n in news:
-        processed.append({
-            "title": n.get("title") if isinstance(n, dict) else str(n),
-            "publisher": n.get("publisher", "") if isinstance(n, dict) else "",
-            "link": n.get("link", "") if isinstance(n, dict) else ""
-        })
-    return processed
-
+        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+        feed = feedparser.parse(url)
+        processed = []
+        for entry in feed.entries[:limit]:
+            processed.append({
+                "title": entry.title,
+                "publisher": entry.get("source", "Yahoo Finance"),
+                "link": entry.link
+            })
+        return processed
+    except Exception as e:
+        st.warning(f"Failed to fetch RSS for {symbol}: {e}")
+        return []
+        
 # --------------------------- Quantitative Analytics --------------------------- #
 def compute_returns(close_df):
     return close_df.pct_change().dropna()
