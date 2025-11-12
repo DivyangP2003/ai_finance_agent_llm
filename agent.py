@@ -422,7 +422,7 @@ with tabs[1]:
                     # Create a clickable card-like display
                     st.markdown(
                         f"""
-                        <div style='padding:10px 15px; margin-bottom:8px; border-radius:10px; background-color:#f9f9f9; box-shadow:0 1px 3px rgba(0,0,0,0.1);'>
+                        <div style='padding:10px 15px; margin-bottom:8px; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1);'>
                             <a href='{link}' target='_blank' style='text-decoration:none; color:#0066cc; font-weight:600;'>{title}</a><br>
                             <span style='font-size:13px; color:#555;'>🗞️ {publisher}</span>
                         </div>
