@@ -756,17 +756,16 @@ Return the answer in clear markdown with sections:
 
 def run_risk_agent(symbols, close_df, benchmark="^GSPC", country="United States"):
     """
-    RiskAnalystAgent — region- and benchmark-aware version.
-    Computes and interprets risk metrics (VaR, volatility, drawdown, correlation, beta)
-    in the context of the selected country's market and benchmark.
+    Enhanced RiskAnalystAgent — now includes advanced quantitative analytics:
+    Alpha, Tracking Error, Sortino, CVaR, Rolling Beta summary, and Stress Tests.
     """
     if close_df.empty:
         return f"No price data available for risk analysis in the {country} market."
 
+    # --- Base metrics ---
     returns = compute_returns(close_df)
     var_results, mdd_results, vol_results = {}, {}, {}
 
-    # --- Compute individual asset risk metrics ---
     for s in returns.columns:
         series = returns[s]
         var_95 = historical_var(series, alpha=0.05)
@@ -776,85 +775,105 @@ def run_risk_agent(symbols, close_df, benchmark="^GSPC", country="United States"
         mdd_results[s] = float(mdd)
         vol_results[s] = float(vol)
 
-    # --- Benchmark Integration ---
-    bench_stats = ""
-    beta_results = {}
-    if benchmark:
-        bench_prices = download_close_prices([benchmark], period="1y")
-        if not bench_prices.empty:
-            bench_returns = compute_returns(bench_prices)
-            bench_var = historical_var(bench_returns.iloc[:, 0], alpha=0.05)
-            bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
-            bench_dd = max_drawdown(bench_prices.iloc[:, 0])
-            bench_name = benchmark
-            bench_stats = (
-                f"\nBenchmark ({bench_name}) — VaR(5%): {bench_var:.2%}, "
-                f"Volatility: {bench_vol:.2%}, Max Drawdown: {bench_dd:.2%}\n"
-            )
+    # --- Benchmark & advanced metrics ---
+    bench_prices = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
+    bench_stats, beta_results, alpha_tracking, sortino_results, cvar_results = "", {}, {}, {}, {}
+    rolling_beta_summary = {}
 
-            # Compute betas vs benchmark
-            for s in returns.columns:
-                beta_results[s] = compute_beta(returns[s], bench_returns.iloc[:, 0])
-        else:
-            for s in returns.columns:
-                beta_results[s] = np.nan
-    else:
+    if not bench_prices.empty:
+        bench_returns = compute_returns(bench_prices).iloc[:, 0]
+        bench_var = historical_var(bench_returns, alpha=0.05)
+        bench_vol = bench_returns.std() * np.sqrt(252)
+        bench_dd = max_drawdown(bench_prices.iloc[:, 0])
+        bench_ret = (bench_prices.iloc[-1] / bench_prices.iloc[0] - 1).iloc[0]
+        bench_stats = (
+            f"\nBenchmark ({benchmark}) — Return: {bench_ret:.2%}, "
+            f"VaR(5%): {bench_var:.2%}, Volatility: {bench_vol:.2%}, Max Drawdown: {bench_dd:.2%}"
+        )
+
         for s in returns.columns:
-            beta_results[s] = np.nan
+            asset = returns[s]
+            beta_results[s] = compute_beta(asset, bench_returns)
+            # Compute alpha & tracking error for each stock vs benchmark
+            a_t = compute_alpha_tracking_error(asset, bench_returns)
+            alpha_tracking[s] = a_t
+            sortino_results[s] = sortino_ratio(asset)
+            cvar_results[s] = expected_shortfall(asset, alpha=0.05)
+            # Rolling beta summary (mean ± std)
+            rb = rolling_beta(asset, bench_returns, window=63, symbol=s)
+            if not rb.empty:
+                rolling_beta_summary[s] = {"mean_beta": rb.mean(), "beta_stability": rb.std()}
+            else:
+                rolling_beta_summary[s] = {"mean_beta": np.nan, "beta_stability": np.nan}
 
-    # --- Correlation Matrix ---
-    corr = returns.corr().round(3).to_dict()
+    # --- Stress tests ---
+    stress_summary = ""
+    if not bench_prices.empty:
+        # Simple -10% benchmark shock
+        betas = {s: compute_beta(returns[s], bench_returns) for s in returns.columns}
+        shock_res = stress_test_shock(returns.columns.tolist(), returns, bench_returns, shock_pct=-0.10, betas=betas)
+        worst_hit = sorted(shock_res.items(), key=lambda x: x[1])[:3]
+        stress_summary += "**Simulated -10% Benchmark Shock (expected P&L impact):**\n"
+        for s, est in shock_res.items():
+            stress_summary += f"- {s}: {est:.2%}\n"
+        stress_summary += "\n**Most sensitive assets:** " + ", ".join([w[0] for w in worst_hit]) + "\n"
 
-    # --- Prompt Building ---
+        # Historical analogs
+        scenarios = stress_test_historical_analogs(symbols, close_df, bench_prices.iloc[:, 0], window=30, top_n=2)
+        if scenarios:
+            stress_summary += "\n**Historical Analog Scenarios:**\n"
+            for scen in scenarios:
+                stress_summary += f"- {scen['start'].date()} → {scen['end'].date()}, Benchmark drop {scen['bench_drop']:.2%}\n"
+    else:
+        stress_summary += "No benchmark data available for stress testing.\n"
+
+    # --- Correlation matrix ---
+    corr = returns.corr().round(2)
+
+    # --- Agent prompt assembly ---
     prompt = f"""
-You are **RiskAnalystAgent**, analyzing portfolio and security-level risk in the **{country}** market.
+You are **RiskAnalystAgent**, performing an advanced, benchmark-aware risk evaluation.
 
-Selected benchmark: **{benchmark}**
+**Country/Region:** {country}  
+**Benchmark:** {benchmark}
 
-### Asset Risk Metrics
-VaR (5%) per asset:
-"""
-    for s, v in var_results.items():
-        prompt += f"- {s}: {v:.2%}\n"
+### 🧩 Summary Metrics
+{bench_stats}
 
-    prompt += "\nMax Drawdown (peak-to-trough):\n"
-    for s, v in mdd_results.items():
-        prompt += f"- {s}: {v:.2%}\n"
+### ⚙️ Asset-Level Risk Metrics
+| Asset | VaR(5%) | Volatility | Max Drawdown |
+|:------|---------:|------------:|--------------:|
+""" + "\n".join(
+        [f"| {s} | {var_results[s]:.2%} | {vol_results[s]:.2%} | {mdd_results[s]:.2%} |" for s in returns.columns]
+    )
 
-    prompt += "\nAnnualized Volatility (σ):\n"
-    for s, v in vol_results.items():
-        prompt += f"- {s}: {v:.2%}\n"
+    prompt += "\n\n### 📈 Advanced Metrics (vs Benchmark)\n"
+    for s in returns.columns:
+        at = alpha_tracking.get(s, {})
+        prompt += f"- {s}: β={beta_results.get(s, np.nan):.2f}, α={at.get('alpha_annual', np.nan):.2%}, TrackingErr={at.get('tracking_error_annual', np.nan):.2%}, Sortino={sortino_results.get(s, np.nan):.2f}, CVaR={cvar_results.get(s, np.nan):.2%}\n"
 
-    # Include benchmark metrics if available
-    if bench_stats:
-        prompt += f"\n### Benchmark Risk Summary\n{bench_stats}"
-        prompt += "\n### Beta (vs Benchmark):\n"
-        for s, b in beta_results.items():
-            if not np.isnan(b):
-                prompt += f"- {s}: {b:.2f}\n"
+    prompt += "\n\n### 🔄 Rolling Beta Stability\n"
+    for s, d in rolling_beta_summary.items():
+        prompt += f"- {s}: Mean β={d['mean_beta']:.2f}, Stability (σβ)={d['beta_stability']:.2f}\n"
 
-    prompt += "\n### Correlation Matrix (rounded):\n"
-    for s, row in corr.items():
-        row_items = ", ".join([f"{k}:{v}" for k, v in row.items()])
-        prompt += f"- {s}: {row_items}\n"
+    prompt += "\n\n### 💥 Stress Tests\n" + stress_summary
 
-    # --- Region-specific Instructions ---
+    prompt += "\n### 🔗 Correlation Matrix (1-year returns):\n" + corr.to_markdown()
+
     prompt += f"""
-### Instructions:
-Interpret these risk metrics for the **{country}** market context:
-- Discuss whether market volatility, drawdown, and VaR are high or low relative to the **{benchmark}**.
-- Explain if risk levels suggest a **risk-on** or **risk-off** environment regionally.
-- Highlight any **benchmark-relative exposures** (e.g., beta > 1 → more sensitive than the benchmark).
-- Mention **correlation clusters** or **sector concentration** effects if visible.
-- Note regional influences (e.g., policy shifts, currency volatility, geopolitical risks).
+---
 
-Structure your answer as:
-**Summary**, **Rationale**, and **Recommendation**.
+### 🧠 Your Tasks:
+1. Identify high-risk vs stable assets based on these metrics.
+2. Highlight benchmark-relative exposures (β > 1, α < 0, high Tracking Error).
+3. Discuss whether the market environment is **risk-on** or **risk-off**.
+4. Provide **Rationale** and **Recommendation** clearly for portfolio risk management.
+
+Be concise but technically deep — this report will feed the TeamLeadAgent.
 """
 
     response = AGENTS["RiskAnalystAgent"].run(prompt)
     return response.content
-
 
 def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None, country="United States"):
     """
