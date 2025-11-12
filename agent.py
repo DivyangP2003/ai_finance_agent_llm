@@ -173,37 +173,63 @@ AGENTS = create_agents()
 # --------------------------- Orchestration --------------------------- #
 def run_market_agent(symbols, close_df, benchmark="^GSPC"):
     """
-    Runs MarketAnalystAgent on given symbols. Returns agent content text.
-    We'll provide the agent with key metrics precomputed and ask it to interpret them.
+    Enhanced version:
+    Includes benchmark returns, volatility, and relative comparisons.
     """
     if close_df.empty:
         return "No price data available for market analysis."
 
     returns = compute_returns(close_df)
     six_month = returns.loc[returns.index >= (close_df.index.max() - pd.DateOffset(months=6))]
-    perf = (close_df.loc[close_df.index.max()] / close_df.loc[close_df.index.max() - pd.Timedelta(days=180)] - 1).to_dict() if (close_df.index.max() - pd.Timedelta(days=180)) in close_df.index else (close_df.pct_change(126).iloc[-1].to_dict() if close_df.shape[0] > 126 else close_df.pct_change().sum().to_dict())
+
+    # Compute recent performance and volatility
+    perf = (close_df.iloc[-1] / close_df.iloc[max(0, len(close_df) - 126)] - 1).to_dict()
     avg_vol = returns.std() * np.sqrt(252)
     volatility = avg_vol.to_dict()
 
+    # --- Benchmark Integration ---
     benchmark_prices = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
     benchmark_returns = compute_returns(benchmark_prices) if not benchmark_prices.empty else pd.DataFrame()
+    bench_ret = bench_vol = np.nan
+    betas = {}
 
-    # Prepare a concise prompt with key metrics and let the agent produce markdown with rationale & recommendation
-    prompt = "You are MarketAnalystAgent. Analyze the following quantitative metrics for symbols: {}\n\n".format(", ".join(close_df.columns))
-    prompt += "Latest date: {}\n\n".format(close_df.index.max().strftime("%Y-%m-%d"))
-    prompt += "6-month approximate returns (latest available):\n"
+    if not benchmark_returns.empty:
+        bench_ret = (benchmark_prices.iloc[-1] / benchmark_prices.iloc[0] - 1).iloc[0]
+        bench_vol = benchmark_returns.std().iloc[0] * np.sqrt(252)
+        for s in returns.columns:
+            betas[s] = compute_beta(returns[s], benchmark_returns.iloc[:, 0])
+    else:
+        for s in returns.columns:
+            betas[s] = np.nan
+
+    # --- Build the prompt ---
+    prompt = f"You are MarketAnalystAgent. Analyze the following quantitative metrics for symbols: {', '.join(close_df.columns)}.\n\n"
+    prompt += f"Latest date: {close_df.index.max().strftime('%Y-%m-%d')}\n\n"
+
+    prompt += "6-month returns (approx):\n"
     for s, v in perf.items():
         prompt += f"- {s}: {v:.2%}\n"
+
     prompt += "\nAnnualized volatility (approx):\n"
     for s, v in volatility.items():
         prompt += f"- {s}: {v:.2%}\n"
-    if not benchmark_returns.empty:
-        prompt += "\nBenchmark (S&P 500) recent vol and returns included for context.\n"
-    prompt += "\nInstructions: Provide a short Market Overview, identify if there is a clear market regime (risk-on / risk-off), and list top 3 signals an analyst should watch. Include explicit sections labeled 'Rationale:' and 'Recommendation:'.\n"
 
-    # run the agent
+    if not np.isnan(bench_ret):
+        prompt += f"\nBenchmark ({benchmark}) 1Y return: {bench_ret:.2%}, volatility: {bench_vol:.2%}\n"
+        prompt += "Betas (vs benchmark):\n"
+        for s, b in betas.items():
+            if not np.isnan(b):
+                prompt += f"- {s}: {b:.2f}\n"
+
+    prompt += (
+        "\nInstructions: Provide a short Market Overview, identify if there is a clear market regime "
+        "(risk-on / risk-off), discuss any benchmark-relative patterns, and list top 3 signals to monitor. "
+        "Include explicit sections labeled 'Rationale:' and 'Recommendation:'.\n"
+    )
+
     response = AGENTS["MarketAnalystAgent"].run(prompt)
     return response.content
+
 
 def run_company_agent(symbol):
     info = fetch_ticker_info(symbol)
@@ -231,14 +257,16 @@ def run_sentiment_agent(symbol):
     return response.content
 
 def run_risk_agent(symbols, close_df, benchmark="^GSPC"):
-    # For each symbol compute VaR (historical 5%), max drawdown, rolling vol, and correlations
+    """
+    Enhanced version:
+    Adds benchmark-based VaR, correlation, and betas.
+    """
     if close_df.empty:
         return "No price data for risk analysis."
 
     returns = compute_returns(close_df)
-    var_results = {}
-    mdd_results = {}
-    vol_results = {}
+    var_results, mdd_results, vol_results = {}, {}, {}
+
     for s in returns.columns:
         series = returns[s]
         var_95 = historical_var(series, alpha=0.05)
@@ -248,25 +276,64 @@ def run_risk_agent(symbols, close_df, benchmark="^GSPC"):
         mdd_results[s] = float(mdd)
         vol_results[s] = float(vol)
 
+    # --- Benchmark Integration ---
+    bench_stats = ""
+    if benchmark:
+        bench_prices = download_close_prices([benchmark], period="1y")
+        if not bench_prices.empty:
+            bench_returns = compute_returns(bench_prices)
+            bench_var = historical_var(bench_returns.iloc[:, 0], alpha=0.05)
+            bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
+            bench_dd = max_drawdown(bench_prices.iloc[:, 0])
+            bench_stats = (
+                f"\nBenchmark ({benchmark}) VaR(5%): {bench_var:.2%}, "
+                f"Vol: {bench_vol:.2%}, Max DD: {bench_dd:.2%}\n"
+            )
+
+    # --- Beta & correlation with benchmark ---
+    beta_results = {}
+    if benchmark and not bench_prices.empty:
+        bench_returns = compute_returns(bench_prices)
+        for s in returns.columns:
+            beta_results[s] = compute_beta(returns[s], bench_returns.iloc[:, 0])
+    else:
+        for s in returns.columns:
+            beta_results[s] = np.nan
+
     corr = returns.corr().round(3).to_dict()
 
-    # Prepare prompt for the risk analyst agent
-    prompt = "You are RiskAnalystAgent. Compute risk metrics and interpret them.\n\n"
-    prompt += "VaR (5%) per asset (approx):\n"
+    # --- Prompt build ---
+    prompt = "You are RiskAnalystAgent. Compute and interpret risk metrics.\n\n"
+    prompt += "VaR (5%) per asset:\n"
     for s, v in var_results.items():
         prompt += f"- {s}: {v:.2%}\n"
-    prompt += "\nMax Drawdown (most recent period):\n"
+
+    prompt += "\nMax Drawdown:\n"
     for s, v in mdd_results.items():
         prompt += f"- {s}: {v:.2%}\n"
-    prompt += "\nAnnualized vol:\n"
+
+    prompt += "\nAnnualized volatility:\n"
     for s, v in vol_results.items():
         prompt += f"- {s}: {v:.2%}\n"
+
+    if bench_stats:
+        prompt += bench_stats
+        prompt += "Betas (vs benchmark):\n"
+        for s, b in beta_results.items():
+            if not np.isnan(b):
+                prompt += f"- {s}: {b:.2f}\n"
+
     prompt += "\nCorrelation snapshot (rounded):\n"
-    # only include top-level pairs to keep prompt short
     for s, row in corr.items():
         row_items = ", ".join([f"{k}:{v}" for k, v in row.items()])
         prompt += f"- {s}: {row_items}\n"
-    prompt += "\nInstructions: Provide an interpretation, list top 3 risk concerns, provide 'Rationale:' and 'Recommendation:' sections.\n"
+
+    prompt += (
+        "\nInstructions: Interpret these risk metrics, highlight benchmark-relative exposures (e.g., "
+        "beta > 1 means higher market sensitivity), list top 3 risk concerns, and include 'Rationale:' "
+        "and 'Recommendation:' sections.\n"
+    )
+
     response = AGENTS["RiskAnalystAgent"].run(prompt)
     return response.content
 
