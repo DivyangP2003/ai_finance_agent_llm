@@ -8,6 +8,6 @@ pandas
 numpy
 feedparser
 pypfopt
-pandas_datarender
+pandas_datareader
 requests
 investpy
