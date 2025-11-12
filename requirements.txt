@@ -3,6 +3,6 @@ yfinance
 plotly
 python-dotenv
 agno
-google-generativeai
+google-genai
 pandas
 numpy
