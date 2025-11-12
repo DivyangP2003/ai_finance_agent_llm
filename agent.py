@@ -429,19 +429,23 @@ def compute_sector_exposure(symbols: list, weights: Dict[str, float] = None) -> 
     return sector_weights
 
 def rolling_beta(asset_returns: pd.Series, benchmark_returns: pd.Series, window=63) -> pd.Series:
+    """
+    Compute rolling beta (OLS slope) between asset and benchmark returns.
+    window: number of days (default 63 ≈ 3 months)
+    """
     merged = pd.concat([asset_returns, benchmark_returns], axis=1).dropna()
-    if merged.empty:
+    if merged.shape[0] < window:
         return pd.Series(dtype=float)
-    # rolling apply on arrays: compute cov(asset,bench)/var(bench)
-    def rb(window_vals):
-        a = window_vals[:,0]
-        b = window_vals[:,1]
-        cov = np.cov(a, b, ddof=1)[0,1]
-        varb = np.var(b, ddof=1)
-        return cov / varb if varb != 0 else np.nan
-    out = merged.rolling(window).apply(lambda x: rb(x), raw=True)
-    # result is DataFrame: we want the first column's values
-    return out.iloc[:,0].rename("rolling_beta")
+    a = merged.iloc[:, 0]
+    b = merged.iloc[:, 1]
+
+    # Use rolling window covariance/variance directly
+    cov = a.rolling(window).cov(b)
+    var = b.rolling(window).var()
+    beta = cov / var
+    beta.name = f"rolling_beta_{window}d"
+    return beta
+
 
 def expected_shortfall(returns: pd.Series, alpha=0.05):
     r = returns.dropna()
