@@ -1961,7 +1961,7 @@ If the question requires deeper analysis, call the correct agent and summarize r
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
         # rerender
-        st.experimental_rerun()
+        st.rerun()
 
 
 # --- Audit & Exports Tab ---
