@@ -1910,17 +1910,20 @@ with tabs[6]:
 
     st.header("💬 Conversational Chat Assistant")
 
-    # initialize chat history
+    # -------------------------------------------------
+    # Initialize chat history
+    # -------------------------------------------------
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # ----------- SAFE CHAT RENDERING -----------
+    # -------------------------------------------------
+    # Safe Chat Rendering (prevents HTML injection)
+    # -------------------------------------------------
     def render_chat():
         for role, msg in st.session_state["chat_history"]:
             color = "#242321" if role == "user" else "#080604"
             label = "You" if role == "user" else "AI"
 
-            # Escape ALL HTML from messages so nothing can break layout
             safe_msg = html.escape(msg).replace("\n", "<br>")
 
             st.markdown(
@@ -1932,7 +1935,9 @@ with tabs[6]:
                 unsafe_allow_html=True
             )
 
-    # ----------- CONTEXTUAL PROMPT BUILDER -----------
+    # -------------------------------------------------
+    # Contextual Prompt Builder
+    # -------------------------------------------------
     def build_contextual_prompt(user_query):
         history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
 
@@ -1948,27 +1953,49 @@ Recent conversation:
 
 User query: {user_query}
 
-If the question requires deeper analysis, call the correct agent and summarize results conversationally.
-Never include HTML tags in your responses. Respond using plain text only.
+Respond in a clean, structured, readable format using plain text only. 
+Follow this structure when appropriate:
+
+1. Summary
+   - Brief 2–3 sentence overview.
+
+2. Key Insights
+   - Short bullet points with the most important findings.
+
+3. Detailed Explanation
+   - Deeper reasoning, comparisons, analysis or context.
+   - Use line breaks for readability.
+
+4. Next Steps / Recommendations
+   - Practical follow-ups tailored to the user’s portfolio.
+
+Rules:
+- Do NOT use HTML, markdown, bold text, tables, or special formatting.
+- Use plain text only.
+- If deeper analysis is needed, call the correct agent and summarize the results clearly.
 """
 
-    # ----------- RENDER CHAT UI -----------
+    # -------------------------------------------------
+    # Render Chat UI
+    # -------------------------------------------------
     render_chat()
 
-    # ----------- USER INPUT -----------
+    # -------------------------------------------------
+    # User Input
+    # -------------------------------------------------
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
     if st.button("Send") and user_input:
-        # add user msg
+        # Add user message
         st.session_state["chat_history"].append(("user", user_input))
 
-        # build prompt
+        # Build prompt
         prompt = build_contextual_prompt(user_input)
 
         # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # add reply to history
+        # Add AI message
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
         st.rerun()
