@@ -1911,50 +1911,84 @@ with tabs[6]:
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # -----------------------
-    # ChatGPT-Style Message Renderer
-    # -----------------------
+    # ---------------------------------------------------------
+    # ChatGPT-Style Safe Bubble Renderer (NO BROKEN HTML EVER)
+    # ---------------------------------------------------------
     def render_message(role, markdown_text):
 
-        # Alignment (AI = left, User = right)
+        # Align bubbles
         align = "flex-end" if role == "user" else "flex-start"
 
         # Bubble colors
         bubble_color = "#2A2A2A" if role == "user" else "#1E1E1E"
-        text_color = "white"
         label = "You" if role == "user" else "AI"
 
+        # -------------------------------
+        # Bubble Header (Name label)
+        # -------------------------------
         st.markdown(
             f"""
             <div style="
                 display:flex;
                 justify-content:{align};
-                margin: 10px 0;
+                margin-top: 12px;
             ">
                 <div style="
                     max-width:70%;
                     background:{bubble_color};
-                    padding:14px 18px;
-                    border-radius:18px;
-                    color:{text_color};
+                    padding:14px 18px 6px 18px;
+                    border-radius:18px 18px 6px 6px;
+                    color:white;
                     font-size:16px;
                     line-height:1.5;
                     box-shadow:0px 0px 4px rgba(0,0,0,0.35);
-                    word-wrap: break-word;
                 ">
-                    <div style="opacity:0.6; font-size:13px; margin-bottom:6px;">
+                    <div style="opacity:0.6; font-size:13px; margin-bottom:4px;">
                         <b>{label}</b>
                     </div>
-                    {markdown_text}
+            """,
+            unsafe_allow_html=True
+        )
+
+        # -------------------------------
+        # Markdown content wrapper (SAFE)
+        # The markdown is NOT placed inside the above HTML bubble.
+        # It's placed in a separate Streamlit-rendered block.
+        # -------------------------------
+        st.markdown(
+            f"""
+            <div style="
+                display:flex;
+                justify-content:{align};
+            ">
+                <div style="
+                    max-width:70%;
+                    background:{bubble_color};
+                    padding:4px 18px 14px 18px;
+                    border-radius:0 0 18px 18px;
+                    color:white;
+                    font-size:16px;
+                    line-height:1.5;
+                ">
+            """,
+            unsafe_allow_html=True
+        )
+
+        # Render text safely as markdown
+        st.markdown(markdown_text)
+
+        # Close wrapper safely
+        st.markdown(
+            """
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    # -----------------------
-    # Build Prompt for TeamLeadAgent
-    # -----------------------
+    # ---------------------------------------------------------
+    # Build Contextual Prompt to Feed TeamLeadAgent
+    # ---------------------------------------------------------
     def build_contextual_prompt(user_query):
         history = "\n".join(
             [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
@@ -1971,41 +2005,41 @@ Recent conversation:
 
 User query: {user_query}
 
-If the question requires deeper analysis, call the appropriate internal agent and summarize results conversationally.
+If the question requires deeper analysis, call the correct agent (market, sentiment, risk, portfolio) and summarize results conversationally.
 """
 
-    # -----------------------
-    # Render existing chat history
-    # -----------------------
+    # ---------------------------------------------------------
+    # Render Chat History
+    # ---------------------------------------------------------
     for role, msg in st.session_state["chat_history"]:
         render_message(role, msg)
 
-    # -----------------------
-    # User input
-    # -----------------------
+    # ---------------------------------------------------------
+    # User Input
+    # ---------------------------------------------------------
     user_input = st.text_input(
         "Ask anything about markets, stocks or portfolio:",
         key="chat_input"
     )
 
-    # -----------------------
-    # Process message
-    # -----------------------
+    # ---------------------------------------------------------
+    # On Send
+    # ---------------------------------------------------------
     if st.button("Send") and user_input.strip():
 
-        # Add user message
+        # Add user message to history
         st.session_state["chat_history"].append(("user", user_input))
 
-        # Build prompt for AI
+        # Build AI prompt with history context
         prompt = build_contextual_prompt(user_input)
 
-        # Generate AI reply
+        # Ask your TeamLeadAgent
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # Add to history
+        # Add assistant reply
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
-        # Refresh UI
+        # Rerender UI
         st.rerun()
 
 
