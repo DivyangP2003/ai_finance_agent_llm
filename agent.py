@@ -14,7 +14,6 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 from fpdf import FPDF
 import statsmodels.api as sm
-import markdown as md
 from typing import Dict, Tuple
 import re
 
