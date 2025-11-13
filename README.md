@@ -135,8 +135,10 @@ A conversational interface to ask about:
 ---
 
 ## Multi-Agent Architecture
-
 ![Multi-Agent Architecture Diagram](images/agent_architecture.svg)
+
+### Multi-Agent Workflow
+![Multi-Agent Workflow Diagram](images/AgentWorkflow.png)
 
 The system follows a **multi-agent orchestration pipeline** where each specialized AI agent contributes domain-specific intelligence to the final report.
 
