@@ -1904,7 +1904,7 @@ with tabs[5]:
             st.markdown("### Allocation Recommendation (XAI)")
             st.markdown(strategy_text)
 
-
+# --- Chat Assistant ---
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
 
@@ -1942,6 +1942,8 @@ Recent conversation:
 User query: {user_query}
 
 If the question requires deeper analysis, call the correct agent and summarize results conversationally.
+Never include HTML tags in your responses. Respond using plain text only.
+
 """
 
     render_chat()
