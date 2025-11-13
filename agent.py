@@ -2015,20 +2015,28 @@ Guidelines:
     # -------------------------------------------------
     # User Input
     # -------------------------------------------------
-    # Track last submitted message to prevent double-send
-    if "last_message" not in st.session_state:
-        st.session_state["last_message"] = ""
+    # -------------------------------------------------
+    # Handle Enter-to-Send behavior
+    # -------------------------------------------------
     
+    # If "clear_input" flag exists, clear the textbox BEFORE rendering it
+    if st.session_state.get("clear_input", False):
+        st.session_state["chat_input"] = ""
+        st.session_state["clear_input"] = False
+    
+    
+    # Text input widget (this sets st.session_state["chat_input"])
     user_input = st.text_input(
         "Ask anything about markets, stocks or portfolio:",
         key="chat_input"
     )
     
-    # When user presses Enter, text_input updates immediately
-    if user_input and user_input != st.session_state["last_message"]:
     
-        # Save last message to avoid re-trigger
-        st.session_state["last_message"] = user_input
+    # Detect Enter press (text input changed)
+    if user_input and st.session_state.get("last_sent") != user_input:
+    
+        # Update tracker
+        st.session_state["last_sent"] = user_input
     
         # Add user message
         st.session_state["chat_history"].append(("user", user_input))
@@ -2039,13 +2047,15 @@ Guidelines:
         # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
     
-        # Add assistant response
+        # Add assistant message
         st.session_state["chat_history"].append(("assistant", ai_reply))
     
-        # Clear input box
-        st.session_state["chat_input"] = ""
+        # Set flag to clear box on next rerun
+        st.session_state["clear_input"] = True
     
+        # Trigger a rerun immediately
         st.rerun()
+    
 
 
 
