@@ -1923,42 +1923,38 @@ with tabs[6]:
         for role, msg in st.session_state["chat_history"]:
             is_user = role == "user"
     
-            avatar = "🧑" if is_user else "🤖"
-            bubble_bg = "#3a3a3a" if is_user else "#262626"
-            text_color = "white"
-            border = "#4e8cff" if is_user else "#00d0ff"
+            bubble_color = "#2b2b2b" if is_user else "#1e1e1e"
+            text_color = "#ffffff"
+            border_color = "#6c6cff" if is_user else "#00c2ff"
+            label = "You" if is_user else "AI"
     
-            cleaned_msg = re.sub(r"<.*?>", "", msg)
+            cleaned_msg = re.sub(r"<.*?>", "", msg)  # strip HTML tags
     
             st.markdown(
                 f"""
-                <div style="display:flex; gap:10px; margin:14px 0;">
-                    
-                    <div style="font-size:28px; padding-top:8px;">{avatar}</div>
-                    
-                    <div style="
-                        background:{bubble_bg};
-                        padding:14px 18px;
-                        border-radius:14px;
-                        border:1px solid {border};
-                        color:{text_color};
-                        max-width:80%;
-                        box-shadow:0 4px 14px rgba(0,0,0,0.25);
-                    ">
+                <div style="
+                    background:{bubble_color};
+                    padding:14px 18px;
+                    margin:12px 0;
+                    border-radius:18px;
+                    border-left:4px solid {border_color};
+                    box-shadow:0 0 12px rgba(0,0,0,0.25);
+                    color:{text_color};
+                    font-size:16px;
+                    line-height:1.5;
+                ">
+                    <div style="font-weight:600; opacity:0.7; margin-bottom:6px;">
+                        {label}
+                    </div>
                 """,
                 unsafe_allow_html=True
             )
     
+            # Render markdown with real formatting (tables, bold, lists, etc.)
             st.markdown(cleaned_msg)
     
-            st.markdown(
-                """
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-    
+            st.markdown("</div>", unsafe_allow_html=True)
+
 
 
     # -------------------------------------------------
