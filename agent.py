@@ -3050,6 +3050,7 @@ with tabs[3]:
 
 # --- AI Dashboard Tab (REPLACE YOUR EXISTING AI DASHBOARD BLOCK WITH THIS) ---
 with tabs[4]:
+    
     st.header("📈 AI Market Intelligence Dashboard — Interactive (Ask Gemini)")
 
     close_df_dash = download_close_prices(symbols, period="1y")
