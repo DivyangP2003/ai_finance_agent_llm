@@ -23,7 +23,7 @@
 
 ## [Visit the Website](https://aifinanceagentllm.streamlit.app/)
 
-
+![DashboadOverview](images/DashboardOverview.png)
 </div>
 
 
@@ -123,7 +123,6 @@ It is designed to help professionals make **faster, smarter, and data-driven dec
 
 ### 💬 Chat Assistant
 ![Chat Assistant](images/Chat.png)
-![Chart Explain](images/ChartExplain.png)
 
 ---
 
