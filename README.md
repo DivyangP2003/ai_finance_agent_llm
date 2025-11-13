@@ -191,21 +191,21 @@ The **TeamLeadAgent** consolidates all agent outputs, applies **benchmark awaren
 
 ## Tab-by-Tab Breakdown
 
-### 1️⃣ User Guide  
+### User Guide  
 Beginner-friendly introduction & glossary.
 
-### 2️⃣ Overview  
+### Overview  
 - 📈 Price charts  
 - 📊 Cumulative returns  
 - 🧠 *MarketAnalystAgent* insights  
 
-### 3️⃣ Company Deep Dives  
+### Company Deep Dives  
 - 🏢 Company metadata  
 - 💰 Financials  
 - 📰 News sentiment  
 - 🧾 *CompanyResearchAgent* results  
 
-### 4️⃣ Risk & Correlation  
+### Risk & Correlation  
 - 📉 Volatility  
 - 🔥 Correlation heatmaps  
 - ⚖️ Rolling beta  
@@ -213,21 +213,21 @@ Beginner-friendly introduction & glossary.
 - 💥 Stress tests  
 - 👁️ *RiskAnalystAgent* insights  
 
-### 5️⃣ AI Dashboard  
+### AI Dashboard  
 - 💬 Interactive Gemini explanations  
 - 📊 Multi-chart insights  
 
-### 6️⃣ Portfolio Strategist  
+### Portfolio Strategist  
 - ⚖️ Equal-weight  
 - 📈 Risk parity  
 - 🚀 Momentum tilt  
 - 🤖 *PortfolioStrategistAgent* recommendations  
 
-### 7️⃣ Chat Assistant  
+### Chat Assistant  
 - 🗣️ Context-aware question routing  
 - 🤝 Multi-agent responses  
 
-### 8️⃣ Audit & Exports  
+### Audit & Exports  
 - 🧾 *TeamLeadAgent* multi-agent report  
 - 📘 Benchmark-aware synthesis  
 
