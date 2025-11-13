@@ -16,7 +16,7 @@ from fpdf import FPDF
 import statsmodels.api as sm
 import markdown as md
 from typing import Dict, Tuple
-
+import re
 
 # --------------------------- Setup --------------------------- #
 load_dotenv()
@@ -1913,24 +1913,25 @@ with tabs[6]:
         st.session_state["chat_history"] = []
 
     # --- Bubble colors ---
-    USER_COLOR = "#242017"      # Dark brown/grey
-    AI_COLOR = "#0f0f0f"        # Deep black
+    USER_COLOR = "#242017"
+    AI_COLOR = "#0f0f0f"
     TEXT_COLOR = "white"
 
+    # --- Chat Bubble Renderer ---
     def render_message(role, markdown_text):
         is_user = role == "user"
-    
+
         bg = USER_COLOR if is_user else AI_COLOR
         align = "flex-end" if is_user else "flex-start"
-        bubble_align = "right" if is_user else "left"
         text_align = "right" if is_user else "left"
-    
+
+        # Bubble container
         st.markdown(
             f"""
             <div style="
                 display: flex;
                 justify-content: {align};
-                margin: 8px 0;
+                margin: 10px 0;
             ">
                 <div style="
                     background: {bg};
@@ -1941,21 +1942,24 @@ with tabs[6]:
                     font-family: 'Inter', sans-serif;
                     text-align: {text_align};
                 ">
-                    {markdown_text}
-                </div>
-            </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
+        # Render markdown properly
+        st.markdown(markdown_text)
 
-    # Render all chat messages
+        # Close bubble
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+    # --- Render chat history ---
     for role, msg in st.session_state["chat_history"]:
         render_message(role, msg)
 
-    # --- User Input ---
+    # --- Input Box ---
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
+    # --- Prompt Builder ---
     def build_contextual_prompt(user_query):
         history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
         return f"""
@@ -1973,12 +1977,18 @@ User query: {user_query}
 If needed, call internal market, risk, sentiment or portfolio agents and summarize naturally.
 """
 
-    # --- Send button ---
+    # --- HTML Cleaner ---
+    def clean_html(text):
+        return re.sub(r"<[^>]+>", "", text)
+
+    # --- Send Button ---
     if st.button("Send") and user_input.strip():
         st.session_state["chat_history"].append(("user", user_input))
 
         prompt = build_contextual_prompt(user_input)
-        ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
+        ai_raw = AGENTS["TeamLeadAgent"].run(prompt).content
+
+        ai_reply = clean_html(ai_raw)
 
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
