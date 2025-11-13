@@ -1175,43 +1175,42 @@ tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlat
 # --- User Guide Tab ---
 with tabs[0]:
     st.markdown("""
-    Welcome to **AI Market Intelligence**, a multi-agent financial analysis system powered by Gemini AI.  
-    This platform helps you understand markets, companies, risks, and optimal portfolio allocations — even if you have **no prior finance background**.
+    Welcome to **AI Market Intelligence**, a multi-agent global financial analysis system powered by **Google Gemini 2.0**.  
+    This platform helps you understand markets, companies, risks, sentiment, and portfolio allocations — even if you have **no prior finance background**.
 
     ---
     """)
 
     st.header("🎯 What This App Does")
     st.markdown("""
-    The app uses a set of specialized AI agents to analyze stocks, markets, and portfolios.  
-    Each agent focuses on one domain — quantitative metrics, company fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines them into a single benchmark-aware investment report.
+    The app uses a set of specialized AI agents to analyze stocks, markets, sentiment, risk, and portfolios.  
+    Each agent focuses on one domain — quantitative metrics, fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines everything into a single benchmark-aware institutional report.
 
-    **Here’s what happens when you run the full orchestration:**
-    - Historical price data is fetched from `Yahoo Finance`
-    - Country-specific **exchange suffixes** are automatically added to your tickers  
+    **Here’s what happens when you run a full analysis:**
+    - Historical price data is fetched from **Yahoo Finance**
+    - Country-specific **exchange suffixes** are automatically applied to your tickers  
     - Market-appropriate **benchmarks** (e.g., S&P 500, Nifty 50, Nikkei 225) are applied  
     - Region-aware **RSS news feeds** are analyzed for sentiment  
-    - Quantitative metrics are computed (volatility, beta, drawdowns, alpha, CVaR, tracking error, etc.)  
+    - Quantitative metrics are computed (volatility, beta, drawdown, alpha, CVaR, tracking error, etc.)  
     - AI agents independently perform:
       - Market analysis  
       - Company fundamentals  
       - Sentiment evaluation  
       - Risk assessment  
       - Portfolio construction  
-    - The **TeamLeadAgent** synthesizes all results into a professional, benchmark-aware institutional report
-
+    - The **TeamLeadAgent** synthesizes all results into a clear, benchmark-aware, professional report
     """)
 
     st.subheader("👥 Agents and Their Roles")
     st.markdown("""
     | Agent | Description | Output Example |
     |--------|--------------|----------------|
-    | **MarketAnalystAgent** | Quantitative analyst — studies prices, trends, volatility, market regime. | “Market regime appears risk-on with tech outperforming.” |
-    | **CompanyResearchAgent** | Company fundamentals & financial health. | “AAPL has strong margins and stable earnings growth.” |
-    | **SentimentAgent** | Evaluates news tone and sentiment from headlines. | “Media sentiment mildly positive (+0.22).” |
-    | **RiskAnalystAgent** | Measures risk (VaR, drawdown, beta, correlation). | “TSLA shows high beta (1.4) and largest drawdown.” |
-    | **PortfolioStrategistAgent** | Suggests allocations (equal-weight, risk-parity, momentum-tilt). | “Allocate 40% AAPL, 35% GOOG, 25% TSLA.” |
-    | **TeamLeadAgent** | Integrates all insights into a detailed investment report. | “Portfolio outperformed S&P 500 with lower volatility.” |
+    | **MarketAnalystAgent** | Studies prices, volatility, trends, momentum, benchmark-relative performance, and market regime. | “Market regime appears mildly risk-on with tech outperforming.” |
+    | **CompanyResearchAgent** | Analyzes fundamentals, earnings strength, valuation, catalysts, and risks. | “AAPL shows strong margins and consistent EPS growth.” |
+    | **SentimentAgent** | Evaluates global/regional news headlines for tone and bias (country-aware RSS). | “Headline sentiment moderately positive (+0.18).” |
+    | **RiskAnalystAgent** | Computes VaR, CVaR, beta, drawdown, correlations, tracking error, stress tests, and rolling metrics. | “TSLA exhibits the highest beta and largest historical drawdown.” |
+    | **PortfolioStrategistAgent** | Suggests allocations (equal-weight, inverse-volatility/risk parity, momentum tilt). | “Recommend 45% AAPL, 35% MSFT, 20% NVDA.” |
+    | **TeamLeadAgent** | Integrates all agent outputs into a structured investment report. | “Portfolio shows moderate active risk vs benchmark with tech overweight.” |
     """)
 
     st.markdown("---")
@@ -1220,32 +1219,40 @@ with tabs[0]:
     st.markdown("""
     1. **Select a Country/Region**  
        This automatically loads:  
-       - the correct benchmark choices,  
-       - the correct exchange suffix,  
-       - region/language for news.  
-       Example:  
+       - the correct benchmark choices  
+       - the correct exchange suffix  
+       - the correct region/language for news  
+
+       Examples:  
        - India → suffix `.NS`  
        - Japan → `.T`  
        - Canada → `.TO`  
        - UK → `.L`
 
-    2. **Enter stock symbols** in the sidebar — e.g.:
-       - `AAPL` (Apple)
-       - `TSLA` (Tesla)
-       - `GOOG` (Alphabet/Google)
-       - You can enter multiple tickers separated by commas.
-       -The system will automatically normalize tickers depending on the chosen country.
-    2. **Select a benchmark** — a market index to compare performance against:
-       - Default: `^GSPC` → S&P 500 (broad U.S. market)
-       - Others: `^DJI` (Dow Jones), `^NDX` (Nasdaq 100), `^IXIC` (Nasdaq Composite)
-    3. **Explore Tabs:**
-       - **Overview:** Historical prices & MarketAnalystAgent.
-       - **Company Deep Dives:** Company research & sentiment.
-       - **Risk & Correlation:** Risk metrics, drawdown, volatility heatmaps.
-       - **AI Dashboard:** Interactive “Ask Gemini About This Chart” explanations 
-       - **Portfolio Strategist:** Allocation recommendations.
-       - **Chat Assistant:** Ask natural language queries.
-       - **Audit & Exports:** Generate benchmark-aware reports.
+    2. **Enter stock symbols** — e.g.:  
+       - `AAPL` (Apple)  
+       - `TSLA` (Tesla)  
+       - `GOOG` (Alphabet/Google)  
+       - Enter multiple tickers separated by commas.  
+       - The app automatically normalizes tickers using the chosen country's suffix.
+
+    3. **Select a Benchmark**  
+       Benchmarks vary by country:
+       - `^GSPC` — S&P 500  
+       - `^NDX` — Nasdaq 100  
+       - `^N225` — Nikkei 225  
+       - `^FTSE` — FTSE 100  
+       - `^STOXX50E` — Euro Stoxx 50  
+       - And many more depending on region.
+
+    4. **Explore the Tabs**
+       - **Overview:** Historical prices, cumulative returns, MarketAnalystAgent.  
+       - **Company Deep Dives:** Fundamentals + region-aware sentiment.  
+       - **Risk & Correlation:** VaR, CVaR, drawdown, correlations, rolling beta, stress tests.  
+       - **AI Dashboard:** Interactive “Ask Gemini About This Chart” explanations.  
+       - **Portfolio Strategist:** Allocation recommendations (equal/risk-parity/momentum).  
+       - **Chat Assistant:** Ask natural language questions.  
+       - **Audit & Exports:** Generate benchmark-aware reports (TeamLeadAgent).
     """)
 
     st.markdown("---")
@@ -1254,86 +1261,112 @@ with tabs[0]:
     st.markdown("""
     ### 🔢 Stock Market Basics
     - **Stock / Equity:** Ownership share in a company.
-    - **Ticker Symbol:** Short code to identify a stock (e.g., `AAPL` = Apple).
-    - **Index / Benchmark:** A collection of stocks used to represent the market (e.g., S&P 500).
-    - **ETF (Exchange-Traded Fund):** A fund that tracks an index (like `SPY` for S&P 500).
-    - **Price:** The latest traded value of a stock.
-    - **Return:** The percentage change in price over a period.
+    - **Ticker Symbol:** Short code identifying a stock (`AAPL` = Apple).
+    - **Index / Benchmark:** Represents a market (e.g., S&P 500).
+    - **ETF:** Fund that tracks an index.
+    - **Return:** Percentage change in price.
 
     ### 📊 Market & Performance Metrics
-    - **Volatility:** How much prices fluctuate. High = risky, Low = stable.
-    - **Standard Deviation:** The math measure behind volatility.
-    - **Drawdown:** The percentage fall from a recent peak — measures loss severity.
-    - **Beta (β):** Sensitivity to market moves. β > 1 = more volatile than market, β < 1 = less volatile.
-    - **Alpha (α):** Return in excess of the benchmark.
-    - **Sharpe Ratio:** Risk-adjusted performance = (Return - Risk-free rate) / Volatility.
-    - **VaR (Value at Risk):** Worst expected loss (e.g., “5% VaR = can lose 3% or more 5% of the time”).
-    - **CVaR / Expected Shortfall** — Average loss in worst-case scenarios.  
-    - **Tracking Error** — How much a portfolio deviates from its benchmark.
-    - **Max Drawdown:** Largest observed drop in value — a stress test of performance.
+    - **Volatility:** Amount of price fluctuation (proxy for risk).
+    - **Standard Deviation:** Mathematical measure of volatility.
+    - **Drawdown:** Drop from a recent peak.
+    - **Beta (β):** Relationship to market movements.
+    - **Alpha (α):** Return above the benchmark.
+    - **Sharpe Ratio:** Risk-adjusted performance.
+    - **VaR (Value at Risk):** Worst expected loss at a confidence level.
+    - **CVaR (Expected Shortfall):** Average loss in the worst tail events.
+    - **Tracking Error:** Deviation from benchmark returns.
+    - **Max Drawdown:** Largest historical decline.
 
     ### 💰 Company & Fundamental Terms
-    - **Market Cap:** Total company value = price × shares outstanding.
-    - **Earnings Per Share (EPS):** Profit per share — measures profitability.
-    - **P/E Ratio (Price-to-Earnings):** Valuation measure. High P/E → expensive stock.
-    - **Revenue Growth:** Increase in company sales over time.
-    - **Margins:** How much profit is kept from each dollar of sales.
-    - **Cash Flow:** Real cash generated — shows business strength.
-    - **Debt-to-Equity Ratio:** Measures leverage (how much debt the company has).
-    - **Dividend Yield:** Annual dividend / price — investor income measure.
+    - **Market Cap:** Total company value.
+    - **EPS:** Profit per share.
+    - **P/E Ratio:** Valuation metric.
+    - **Margins:** Profitability measure.
+    - **Cash Flow:** Cash generated by the company.
+    - **Debt-to-Equity:** Leverage measure.
+    - **Dividend Yield:** Annual dividends ÷ price.
 
     ### 💬 Behavioral & Sentiment Terms
-    - **Market Sentiment:** Overall tone (bullish = optimistic, bearish = pessimistic).
-    - **Headline Sentiment:** News tone score from -1 (negative) to +1 (positive).
-    - **Catalyst:** Event that might move prices (e.g., earnings release, product launch).
-    - **Momentum:** Recent trend strength — stocks going up tend to keep rising (short term).
+    - **Sentiment Score:** Tone from news headlines.
+    - **Catalyst:** Event that may move prices.
+    - **Momentum:** Strength of recent price trend.
 
     ### ⚖️ Portfolio & Risk Terms
-    - **Diversification:** Holding different assets to reduce risk.
-    - **Correlation:** How assets move relative to each other (-1 = opposite, +1 = together).
-    - **Risk Parity:** Balancing portfolio risk by inverse volatility.
-    - **Equal Weight:** Every stock gets the same percentage.
-    - **Momentum Tilt:** Overweight stocks that are trending upward.
-    - **Hedging:** Using offsetting assets to protect against loss.
-    - **Tracking Error:** How much a portfolio deviates from its benchmark.
-    - **Benchmark-relative Return:** Outperformance or underperformance vs. the benchmark.
+    - **Diversification:** Risk reduction by variety.
+    - **Correlation:** Co-movement between assets.
+    - **Risk Parity:** Weighting by inverse volatility.
+    - **Momentum Tilt:** Overweighting trending assets.
+    - **Hedging:** Risk reduction strategy.
+    - **Benchmark-relative Return:** Outperformance vs benchmark.
 
-    ### 🏦 Economic & Market Context
-    - **Risk-on Environment:** Investors prefer stocks and higher risk assets.
-    - **Risk-off Environment:** Investors seek safety (bonds, gold, cash).
-    - **Interest Rates:** Cost of borrowing money — affects valuations.
-    - **Inflation:** Rate at which prices increase — reduces purchasing power.
-    - **Yield Curve:** Shows interest rates for bonds of different maturities.
-    - **Recession:** Period of declining economic activity.
-    - **Market Regime:** Overall condition of market (bullish, bearish, volatile, stable).
+    ### 🏦 Macro & Market Context
+    - **Risk-On:** Investors prefer risk assets.
+    - **Risk-Off:** Investors shift to safety.
+    - **Yield Curve:** Relationship between short/long-term rates.
+    - **Inflation:** General price increases.
+    - **Recession:** Economic decline.
+    - **Market Regime:** Market condition (bullish, bearish, volatile).
 
-    ### 🧠 AI & Analytical Concepts
-    - **Agent:** An autonomous AI process that performs a specific analytical role.
-    - **Multi-Agent System:** Several AI agents collaborating — like departments in a research team.
-    - **Prompt:** The instructions given to each AI model (e.g., “Analyze volatility trends”).
-    - **Explainability (XAI):** Making AI reasoning transparent and auditable.
+    ### 🧠 AI Concepts
+    - **Agent:** Specialized AI role.
+    - **Multi-Agent System:** Several agents collaborating.
+    - **Explainability (XAI):** Transparent reasoning.
     """)
 
     st.markdown("---")
 
     st.header("📘 How to Interpret AI Reports")
     st.markdown("""
-    Every report includes structured sections for clarity:
+    Each AI-generated report includes the following structured sections:
 
     | Section | What It Means |
     |----------|---------------|
-    | **Executive Summary** | High-level overview — performance, tone, and trends. |
-    | **Market & Benchmark Overview** | Context on how markets and your stocks performed vs benchmark. |
-    | **Company Deep Dives** | Company fundamentals and financial analysis. |
-    | **Sentiment Insights** | News tone and behavioral signals. |
-    | **Risk Assessment** | Sortino Ratio, VaR, drawdown, volatility, Stress test, and correlation results. |
-    | **AI Dashboard** | AI Explanatory Visuals: Efficient Frontier (Mean-Variance Preview), Monte Carlo Forecasting,Cumulative Returns vs Benchmark, Rolling beta, Portfolio Allocation Comparison (Equal • Risk-Parity • Momentum) |
-    | **Portfolio Strategy** | AI’s allocation recommendation with rationale. |
-    | **Recommendations** | Actionable buy/hold/sell or weighting guidance. |
-    | **Audit Trail** | Lists which AI agent produced which section. |
+    | **Executive Summary** | Overall performance, sentiment, and benchmark context. |
+    | **Market & Benchmark Overview** | How your selected assets performed relative to the benchmark. |
+    | **Company Deep Dives** | Fundamentals, earnings, catalysts, valuation. |
+    | **Sentiment Insights** | News tone (+/-) and behavioral signals. |
+    | **Risk Assessment** | VaR, CVaR, volatility, beta, drawdown, correlations, stress tests. |
+    | **AI Dashboard Insights** | AI explanations of charts: returns, rolling metrics, vol, beta, risk comparisons. |
+    | **Portfolio Strategy** | Allocation (equal, risk-parity, momentum) with rationale. |
+    | **Recommendations** | Actionable guidance (overweight, hold, reduce). |
+    | **Audit Trail** | Shows which agent produced which section. |
 
-    Each **Rationale** section explains *why* the recommendation was made.  
-    Each **Recommendation** tells you *what* to do (e.g., overweight, hold, reduce exposure).
+    The **Rationale** sections explain *why* something is recommended.  
+    The **Recommendations** tell you *what to do next*.
+    """)
+
+    st.markdown("---")
+
+    st.header("🗣️ Chat Assistant — How It Works")
+    st.markdown("""
+    The **Chat Assistant** lets you ask natural language questions about markets, stocks, risk, charts, strategies, or definitions.  
+    Your query is automatically routed to the most relevant AI agent.
+
+    ### 🔍 How Routing Works
+    | Question Type | Routed To | Examples |
+    |---------------|-----------|----------|
+    | **Market performance / comparisons** | `MarketAnalystAgent` | “How has AAPL performed vs the Nasdaq 100?” |
+    | **Company fundamentals** | `CompanyResearchAgent` | “Does MSFT have strong earnings?” |
+    | **News & sentiment** | `SentimentAgent` | “What’s the sentiment for Tesla today?” |
+    | **Risk / volatility / correlation** | `RiskAnalystAgent` | “Which stock is riskier? Compare CVaR.” |
+    | **Portfolio construction** | `PortfolioStrategistAgent` | “Build a momentum-weighted portfolio.” |
+    | **General financial questions** | `TeamLeadAgent` | “Explain what beta means.” |
+
+    ### 💬 What You Can Ask
+    - **Market questions:** “Is the market risk-on right now?”
+    - **Stock comparisons:** “Compare MSFT and NVDA.”
+    - **Fundamentals:** “Is Amazon overvalued?”
+    - **Sentiment:** “Summarize today’s Tesla news.”
+    - **Risk:** “Which stock has the highest drawdown?”
+    - **Portfolio:** “Create a risk-parity allocation.”
+    - **Definitions:** “Explain CVaR in simple words.”
+
+    ### 💡 Tips
+    - Be specific when comparing assets  
+    - Mention the benchmark for better context  
+    - Ask follow-up questions — the assistant remembers context  
+    - Great for beginners learning terminology  
     """)
 
     st.markdown("---")
@@ -1350,14 +1383,13 @@ with tabs[0]:
 
     st.header("💡 Tips for Beginners")
     st.markdown("""
-    - Hover over terms or open this guide if you’re unsure about terminology.  
-    - Start with **one stock** and learn how each agent’s report changes.  
-    - Compare your stock to benchmarks like `^GSPC` or `^NDX` to understand context.  
-    - Use the **Chat Assistant** tab to ask things like:
+    - Hover over terms or revisit this guide if you're unsure.  
+    - Start with **one stock** and observe how agents respond.  
+    - Compare your stock against benchmarks like `^GSPC` or `^NDX`.  
+    - Use the **Chat Assistant** for educational questions:
       - “What is volatility?”
-      - “How has AAPL’s performance compared to the S&P 500?”
-      - “Which stock has the lowest drawdown?”
-    - You can generate **short** or **detailed** reports — both are benchmark-aware.
+      - “Why does beta matter?”
+      - “How does AAPL compare to the S&P 500?”
     """)
 
     st.success("✅ You’re all set! Start with the 'Overview' tab to explore your first analysis.")
