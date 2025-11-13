@@ -1169,7 +1169,7 @@ if api_key:
 elif api_key_env:
     os.environ["GOOGLE_API_KEY"] = api_key_env
 
-tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlation", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
+tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlation","AI Dashboard", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
 
 # --- User Guide Tab ---
 with tabs[0]:
@@ -1546,8 +1546,156 @@ with tabs[3]:
                 df_es["Sortino"] = df_es["Sortino"].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "N/A")
                 st.table(df_es[["CVaR_pct","Sortino"]])
 
-# --- Portfolio Strategist Tab ---
+
+# --- AI Dashboard Tab ---
 with tabs[4]:
+    st.header("📈 AI Market Intelligence Dashboard")
+
+    close_df_dash = download_close_prices(symbols, period="1y")
+    bench_prices_dash = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
+    returns_dash = compute_returns(close_df_dash)
+
+    if close_df_dash.empty:
+        st.warning("No data available for visualization.")
+    else:
+        # ---------------------- 1. Cumulative Returns Chart ----------------------
+        st.subheader("Cumulative Returns vs Benchmark (1Y)")
+
+        cum = (1 + returns_dash).cumprod()
+        fig_cum = go.Figure()
+
+        # Add all stocks
+        for c in cum.columns:
+            fig_cum.add_trace(go.Scatter(x=cum.index, y=cum[c], mode="lines", name=c))
+
+        # Add benchmark
+        if not bench_prices_dash.empty:
+            bench_ret = compute_returns(bench_prices_dash).iloc[:, 0]
+            bench_cum = (1 + bench_ret).cumprod()
+            fig_cum.add_trace(go.Scatter(
+                x=bench_cum.index, y=bench_cum.values, mode="lines",
+                name=f"{benchmark}", line=dict(width=3, dash="dash")
+            ))
+
+        fig_cum.update_layout(template="plotly_white", yaxis_title="Growth (1 = 0%)")
+        st.plotly_chart(fig_cum, use_container_width=True)
+
+        # ---------------------- 2. Alpha vs Beta Scatter ----------------------
+        st.subheader("Alpha vs Beta Scatter (Risk-Adjusted Performance)")
+
+        betas = {}
+        alphas = {}
+
+        if not bench_prices_dash.empty:
+            bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+            for c in returns_dash.columns:
+                res = compute_alpha_tracking_error(returns_dash[c], bench_ret_full)
+                betas[c] = res["beta"]
+                alphas[c] = res["alpha_annual"]
+
+            fig_ab = go.Figure()
+            fig_ab.add_trace(go.Scatter(
+                x=list(betas.values()),
+                y=list(alphas.values()),
+                mode="markers+text",
+                text=list(betas.keys()),
+                textposition="top center"
+            ))
+            fig_ab.update_layout(
+                xaxis_title="Beta (Market Sensitivity)",
+                yaxis_title="Alpha (Annualized)",
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_ab, use_container_width=True)
+
+        # ---------------------- 3. Rolling Correlation vs Benchmark ----------------------
+        st.subheader("Rolling 63-Day Correlation vs Benchmark")
+
+        if not bench_prices_dash.empty:
+            bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+            fig_corr_roll = go.Figure()
+
+            for c in returns_dash.columns:
+                roll_corr = returns_dash[c].rolling(63).corr(bench_ret_full)
+                fig_corr_roll.add_trace(go.Scatter(
+                    x=roll_corr.index, y=roll_corr.values, mode="lines", name=c
+                ))
+
+            fig_corr_roll.update_layout(
+                template="plotly_white",
+                yaxis_title="Correlation",
+                title="63-Day Rolling Correlation"
+            )
+            st.plotly_chart(fig_corr_roll, use_container_width=True)
+
+        # ---------------------- 4. Allocation Pie Charts ----------------------
+        st.subheader("Portfolio Allocation Comparison")
+
+        if not returns_dash.empty:
+            # equal-weight
+            equal = {s: 1/len(symbols) for s in symbols}
+
+            # inverse-vol
+            vols = returns_dash.std() * np.sqrt(252)
+            invvol = (1 / vols)
+            invvol = (invvol / invvol.sum()).round(4).to_dict()
+
+            # momentum-tilt
+            six_month = close_df_dash.pct_change(126).iloc[-1]
+            mom = six_month / six_month.sum() if six_month.sum() != 0 else equal
+            mom = mom.round(4).to_dict()
+
+            fig_alloc = go.Figure()
+
+            fig_alloc.add_trace(go.Pie(labels=list(equal.keys()), values=list(equal.values()), domain=dict(x=[0, .33]), name="Equal Weight"))
+            fig_alloc.add_trace(go.Pie(labels=list(invvol.keys()), values=list(invvol.values()), domain=dict(x=[.33, .66]), name="Risk Parity"))
+            fig_alloc.add_trace(go.Pie(labels=list(mom.keys()), values=list(mom.values()), domain=dict(x=[.66, 1]), name="Momentum"))
+
+            fig_alloc.update_layout(title="Equal • Risk-Parity • Momentum Allocations")
+            st.plotly_chart(fig_alloc, use_container_width=True)
+
+        # ---------------------- 5. Sector Exposure Treemap ----------------------
+        st.subheader("Sector Exposure Treemap (Based on yfinance Metadata)")
+
+        sector_weights = compute_sector_exposure(symbols, weights={s:1/len(symbols) for s in symbols})
+        df_sector = pd.DataFrame({
+            "Sector": list(sector_weights.keys()),
+            "Weight": list(sector_weights.values())
+        })
+
+        fig_tree = go.Figure(go.Treemap(
+            labels=df_sector["Sector"],
+            parents=["Portfolio"] * len(df_sector),
+            values=df_sector["Weight"]
+        ))
+
+        fig_tree.update_layout(template="plotly_white")
+        st.plotly_chart(fig_tree, use_container_width=True)
+
+        # ---------------------- 6. Stress Test Bar Chart ----------------------
+        st.subheader("Stress Test: -10% Benchmark Shock Impact")
+
+        if not bench_prices_dash.empty:
+            bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+            betas_calc = {s: compute_beta(returns_dash[s], bench_ret_full) for s in symbols}
+            shock = stress_test_shock(symbols, returns_dash, bench_ret_full, shock_pct=-0.10, betas=betas_calc)
+
+            df_shock = pd.DataFrame({
+                "Symbol": list(shock.keys()),
+                "Impact (%)": [v * 100 for v in shock.values()]
+            })
+
+            fig_shock = go.Figure(go.Bar(
+                x=df_shock["Symbol"], y=df_shock["Impact (%)"]
+            ))
+            fig_shock.update_layout(
+                yaxis_title="Estimated Loss (%)",
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_shock, use_container_width=True)
+
+# --- Portfolio Strategist Tab ---
+with tabs[5]:
     st.header("Portfolio Strategist — Allocation Proposals")
     close_df_port = download_close_prices(symbols, period="1y")
     constraints_raw = st.text_input("Constraints (json) e.g. {'max_weight':0.4}", "")
@@ -1562,7 +1710,7 @@ with tabs[4]:
             st.markdown(strategy_text)
 
 # --- Chat Assistant Tab ---
-with tabs[5]:
+with tabs[6]:
     st.header("Natural Language Research Assistant")
     st.markdown("Ask the system — it will route to an appropriate agent and return text + visuals when applicable.")
     user_query = st.text_input("Enter your question (e.g., 'Show me volatility trends for the S&P 500 in the last year')", "")
@@ -1590,7 +1738,7 @@ with tabs[5]:
                             st.markdown(text)
 
 # --- Audit & Exports Tab ---
-with tabs[6]:
+with tabs[7]:
     st.header("Audit Trail & Report Generation")
     st.markdown("Run all agents together, integrate results, and generate a benchmark-aware TeamLead report.")
 
