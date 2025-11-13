@@ -15,21 +15,21 @@ The platform integrates **real market data**, **multi-agent reasoning**, **quant
 
 ## 📌 Table of Contents
 
-- [🔍 Overview](#-overview)
-- [🚀 Key Features](#key-features)
-- [🧩 Multi-Agent Architecture](#multi-agent-architecture)
-- [📊 System Capabilities](#system-capabilities)
-- [📉 Quantitative Analytics](#quantitative-analytics)
-- [🧭 Tab-by-Tab Breakdown](#tab-by-tab-breakdown)
-- [🌍 Data Sources](#data-sources)
-- [🛠 Installation & Setup](#installation--setup)
-- [💻 Tech Stack](#tech-stack)
-- [🎯 Target Users](#target-users)
-- [🔮 Future Enhancements](#future-enhancements)
+- [Overview](#-overview)
+- [Key Features](#key-features)
+- [Multi-Agent Architecture](#multi-agent-architecture)
+- [System Capabilities](#system-capabilities)
+- [Quantitative Analytics](#quantitative-analytics)
+- [Tab-by-Tab Breakdown](#tab-by-tab-breakdown)
+- [Data Sources](#data-sources)
+- [Installation & Setup](#installation--setup)
+- [Tech Stack](#tech-stack)
+- [Target Users](#target-users)
+- [Future Enhancements](#future-enhancements)
 
 ---
 
-## 🔍 Overview
+## Overview
 
 **AI Market Intelligence** is a **decision-support platform** combining:
 
@@ -45,7 +45,7 @@ It is designed to help professionals make **faster, smarter, and data-driven dec
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 ### 🔸 1. Multi-Agent Market Intelligence
 
@@ -134,7 +134,7 @@ A conversational interface to ask about:
 
 ---
 
-## 🧩 Multi-Agent Architecture
+## Multi-Agent Architecture
 
 The system follows a **multi-agent orchestration pipeline** where each specialized AI agent contributes domain-specific intelligence to the final report.
 
@@ -155,7 +155,7 @@ The **TeamLeadAgent** consolidates all agent outputs, applies **benchmark awaren
 
 ---
 
-## 📊 System Capabilities
+## System Capabilities
 
 - ✔ **Global equity analysis**  
 - ✔ **Benchmark-relative performance**  
@@ -169,7 +169,7 @@ The **TeamLeadAgent** consolidates all agent outputs, applies **benchmark awaren
 
 ---
 
-## 📉 Quantitative Analytics
+## Quantitative Analytics
 
 | **Metric** | **Description** |
 |-------------|-----------------|
@@ -185,7 +185,7 @@ The **TeamLeadAgent** consolidates all agent outputs, applies **benchmark awaren
 
 ---
 
-## 🧭 Tab-by-Tab Breakdown
+## Tab-by-Tab Breakdown
 
 ### 1️⃣ User Guide  
 Beginner-friendly introduction & glossary.
@@ -229,7 +229,7 @@ Beginner-friendly introduction & glossary.
 
 ---
 
-## 🌍 Data Sources
+## Data Sources
 
 | **Source** | **Usage** |
 |-------------|-----------|
@@ -239,7 +239,7 @@ Beginner-friendly introduction & glossary.
 
 ---
 
-## 🛠 Installation & Setup
+## Installation & Setup
 
 Clone the repository and install the required dependencies:
 
@@ -256,7 +256,7 @@ streamlit run app.py
 ```
 ---
 
-## 💻 Tech Stack
+## Tech Stack
 
 | **Component** | **Technology** |
 |----------------|----------------|
@@ -269,7 +269,7 @@ streamlit run app.py
 
 ---
 
-## 🎯 Target Users
+## Target Users
 
 The platform is designed for:
 
@@ -283,7 +283,7 @@ The platform is designed for:
 
 ---
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
 - 📉 Monte Carlo return simulation  
 - 🧮 Efficient frontier (mean-variance optimization)  
