@@ -26,7 +26,6 @@ The platform integrates **real market data**, **multi-agent reasoning**, **quant
 - [💻 Tech Stack](#tech-stack)
 - [🎯 Target Users](#target-users)
 - [🔮 Future Enhancements](#future-enhancements)
-- [📄 License](#license)
 
 ---
 
