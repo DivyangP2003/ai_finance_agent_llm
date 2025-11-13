@@ -1910,62 +1910,78 @@ with tabs[6]:
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # ----------------------
-    # Beautiful ChatGPT-style Renderer
-    # ----------------------
+    # --------------------------
+    # CHATGPT-STYLE MESSAGE WITH AVATARS
+    # --------------------------
     def render_message(role, markdown_text):
 
-        justify = "flex-start" if role == "assistant" else "flex-end"
-        bg_color = "#1E1E1E" if role == "assistant" else "#2A2A2A"
-        text_color = "white"
-        label = "AI" if role == "assistant" else "You"
+        is_user = role == "user"
 
-        # Bubble wrapper
+        # Avatar symbols
+        avatar = "🧑" if is_user else "🤖"
+
+        # Alignment
+        row_align = "flex-end" if is_user else "flex-start"
+        bubble_align = "row-reverse" if is_user else "row"
+
+        # Bubble color
+        bubble_color = "#2A2A2A" if is_user else "#1E1E1E"
+
         st.markdown(
             f"""
-            <div style="
-                display:flex;
-                justify-content:{justify};
-                margin: 12px 0;
-            ">
-                <div style="
-                    background:{bg_color};
-                    color:{text_color};
-                    max-width:70%;
-                    padding:14px 18px;
-                    border-radius:18px;
-                    font-size:16px;
-                    line-height:1.6;
-                    box-shadow:0 0 6px rgba(0,0,0,0.4);
-                    white-space:pre-wrap;
-                    overflow-wrap:break-word;
-                ">
-                    <div style="opacity:0.65; font-size:13px; margin-bottom:8px;">
-                        <b>{label}</b>
+            <div style="display:flex; justify-content:{row_align}; margin:10px 0;">
+                <div style="display:flex; flex-direction:{bubble_align}; gap:10px; align-items:flex-start; max-width:80%;">
+                    
+                    <!-- Avatar -->
+                    <div style="
+                        width:38px;
+                        height:38px;
+                        background:#3A3A3A;
+                        border-radius:50%;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        font-size:20px;
+                        color:white;
+                        flex-shrink:0;
+                    ">
+                        {avatar}
                     </div>
-        """,
+
+                    <!-- Bubble -->
+                    <div style="
+                        background:{bubble_color};
+                        color:white;
+                        padding:14px 18px;
+                        border-radius:18px;
+                        font-size:16px;
+                        line-height:1.55;
+                        box-shadow:0px 0px 6px rgba(0,0,0,0.35);
+                        white-space:pre-wrap;
+                        overflow-wrap:break-word;
+                        width:100%;
+                    ">
+            """,
             unsafe_allow_html=True
         )
 
-        # Markdown content INSIDE bubble
-        st.markdown(markdown_text)
+        # Render markdown INSIDE bubble
+        st.markdown(markdown_text, unsafe_allow_html=False)
 
-        # Closing HTML tags
         st.markdown(
             """
+                    </div>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    # ----------------------
-    # Build prompt
-    # ----------------------
+    # --------------------------
+    # Context Building
+    # --------------------------
     def build_contextual_prompt(user_query):
-        history = "\n".join(
-            [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
-        )
+        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
         return f"""
 You are a conversational financial assistant connected to a multi-agent research system.
 
@@ -1973,21 +1989,21 @@ User tickers: {symbols}
 Country: {selected_country}
 Benchmark: {benchmark}
 
-Recent conversation:
+Conversation so far:
 {history}
 
 User query: {user_query}
 """
 
-    # ----------------------
-    # Render chat history
-    # ----------------------
+    # --------------------------
+    # Display chat
+    # --------------------------
     for role, msg in st.session_state["chat_history"]:
         render_message(role, msg)
 
-    # ----------------------
-    # Input bar
-    # ----------------------
+    # --------------------------
+    # User Input
+    # --------------------------
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
     if st.button("Send") and user_input.strip():
@@ -2000,6 +2016,7 @@ User query: {user_query}
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
         st.rerun()
+
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
