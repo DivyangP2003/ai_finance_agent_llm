@@ -16,6 +16,7 @@ from fpdf import FPDF
 import statsmodels.api as sm
 from typing import Dict, Tuple
 import re
+import html  # <-- required for HTML escaping
 
 # --------------------------- Setup --------------------------- #
 load_dotenv()
@@ -1906,29 +1907,35 @@ with tabs[5]:
 
 # --- Chat Assistant ---
 with tabs[6]:
+
     st.header("💬 Conversational Chat Assistant")
 
     # initialize chat history
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
+    # ----------- SAFE CHAT RENDERING -----------
     def render_chat():
         for role, msg in st.session_state["chat_history"]:
             color = "#242321" if role == "user" else "#080604"
             label = "You" if role == "user" else "AI"
+
+            # Escape ALL HTML from messages so nothing can break layout
+            safe_msg = html.escape(msg).replace("\n", "<br>")
+
             st.markdown(
                 f"""
                 <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
-                    <b>{label}:</b><br>{msg}
+                    <b>{label}:</b><br>{safe_msg}
                 </div>
                 """,
                 unsafe_allow_html=True
             )
 
+    # ----------- CONTEXTUAL PROMPT BUILDER -----------
     def build_contextual_prompt(user_query):
-        history = "\n".join(
-            [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
-        )
+        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
+
         return f"""
 You are a conversational financial assistant connected to a multi-agent research system.
 
@@ -1943,11 +1950,12 @@ User query: {user_query}
 
 If the question requires deeper analysis, call the correct agent and summarize results conversationally.
 Never include HTML tags in your responses. Respond using plain text only.
-
 """
 
+    # ----------- RENDER CHAT UI -----------
     render_chat()
 
+    # ----------- USER INPUT -----------
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
     if st.button("Send") and user_input:
@@ -1960,11 +1968,11 @@ Never include HTML tags in your responses. Respond using plain text only.
         # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # add to history
+        # add reply to history
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
-        # rerender
         st.rerun()
+
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
