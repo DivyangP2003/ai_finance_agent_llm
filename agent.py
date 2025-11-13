@@ -1921,23 +1921,39 @@ with tabs[6]:
     # -------------------------------------------------
     def render_chat():
         for role, msg in st.session_state["chat_history"]:
-            color = "#242321" if role == "user" else "#080604"
-            label = "You" if role == "user" else "AI"
+            is_user = role == "user"
     
-            # Remove HTML tags but KEEP markdown
-            cleaned_msg = re.sub(r"<.*?>", "", msg)
+            bubble_color = "#2b2b2b" if is_user else "#1e1e1e"
+            text_color = "#ffffff"
+            border_color = "#6c6cff" if is_user else "#00c2ff"
+            label = "You" if is_user else "AI"
+    
+            cleaned_msg = re.sub(r"<.*?>", "", msg)  # strip HTML tags
     
             st.markdown(
                 f"""
-                <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
-                    <b>{label}:</b><br>
-                </div>
+                <div style="
+                    background:{bubble_color};
+                    padding:14px 18px;
+                    margin:12px 0;
+                    border-radius:18px;
+                    border-left:4px solid {border_color};
+                    box-shadow:0 0 12px rgba(0,0,0,0.25);
+                    color:{text_color};
+                    font-size:16px;
+                    line-height:1.5;
+                ">
+                    <div style="font-weight:600; opacity:0.7; margin-bottom:6px;">
+                        {label}
+                    </div>
                 """,
                 unsafe_allow_html=True
             )
     
-            # Render markdown natively (tables, bold, lists, etc.)
+            # Render markdown with real formatting (tables, bold, lists, etc.)
             st.markdown(cleaned_msg)
+    
+            st.markdown("</div>", unsafe_allow_html=True)
 
 
     # -------------------------------------------------
