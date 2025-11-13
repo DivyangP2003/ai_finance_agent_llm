@@ -1923,21 +1923,16 @@ with tabs[6]:
         for role, msg in st.session_state["chat_history"]:
             is_user = role == "user"
     
-            # ChatGPT-like alignment
+            # Alignment like ChatGPT
             alignment = "flex-end" if is_user else "flex-start"
     
-            # Bubble styling
-            bubble_bg = "#3b3b3b" if is_user else "#1e1e1e"
-            border_color = "#6c6cff" if is_user else "#00c2ff"
+            # Bubble styling (blue for AI)
+            bubble_bg = "#3b3bff" if not is_user else "#3b3b3b"
+            border_color = "#6c6cff" if is_user else "#1a1aff"
             text_color = "white"
     
-            # Clean HTML tags
+            # Clean HTML
             cleaned_msg = re.sub(r"<.*?>", "", msg)
-    
-            # Use first line of message as header (truncated for cleanliness)
-            title_line = cleaned_msg.strip().split("\n")[0]
-            if len(title_line) > 60:
-                title_line = title_line[:60] + "..."
     
             st.markdown(
                 f"""
@@ -1957,14 +1952,11 @@ with tabs[6]:
                         font-size:16px;
                         line-height:1.5;
                     ">
-                        <div style="font-weight:700; opacity:0.9; margin-bottom:6px;">
-                            {title_line}
-                        </div>
                 """,
                 unsafe_allow_html=True
             )
     
-            # Render the full markdown message
+            # Render full markdown INSIDE the bubble
             st.markdown(cleaned_msg)
     
             st.markdown(
@@ -1974,6 +1966,7 @@ with tabs[6]:
                 """,
                 unsafe_allow_html=True
             )
+    
 
     # -------------------------------------------------
     # Contextual Prompt Builder
