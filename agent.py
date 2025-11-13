@@ -1917,7 +1917,7 @@ with tabs[6]:
     AI_COLOR = "#0f0f0f"        # Deep black
     TEXT_COLOR = "white"
 
-   def render_message(role, markdown_text):
+    def render_message(role, markdown_text):
         bg = USER_COLOR if role == "user" else AI_COLOR
         label = "You" if role == "user" else "AI"
     
