@@ -2004,8 +2004,6 @@ Guidelines:
 - Do not fabricate numerical values. Use qualitative reasoning when exact data is not available.
 - Provide plain-language financial insights, summaries, and analysis.
 - If deeper analysis is needed, call the correct agent and summarize the results smoothly.
-- If the user's question is ambiguous or incomplete, ask a clarification question instead of guessing.
-
 """
 
 
