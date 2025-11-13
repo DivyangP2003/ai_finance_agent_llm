@@ -15,7 +15,6 @@ from agno.models.google import Gemini
 from fpdf import FPDF
 import statsmodels.api as sm
 from typing import Dict, Tuple
-import itertools
 
 
 # --------------------------- Setup --------------------------- #
@@ -757,16 +756,17 @@ Return the answer in clear markdown with sections:
 
 def run_risk_agent(symbols, close_df, benchmark="^GSPC", country="United States"):
     """
-    Enhanced RiskAnalystAgent — now includes advanced quantitative analytics:
-    Alpha, Tracking Error, Sortino, CVaR, Rolling Beta summary, and Stress Tests.
+    RiskAnalystAgent — region- and benchmark-aware version.
+    Computes and interprets risk metrics (VaR, volatility, drawdown, correlation, beta)
+    in the context of the selected country's market and benchmark.
     """
     if close_df.empty:
         return f"No price data available for risk analysis in the {country} market."
 
-    # --- Base metrics ---
     returns = compute_returns(close_df)
     var_results, mdd_results, vol_results = {}, {}, {}
 
+    # --- Compute individual asset risk metrics ---
     for s in returns.columns:
         series = returns[s]
         var_95 = historical_var(series, alpha=0.05)
@@ -776,105 +776,85 @@ def run_risk_agent(symbols, close_df, benchmark="^GSPC", country="United States"
         mdd_results[s] = float(mdd)
         vol_results[s] = float(vol)
 
-    # --- Benchmark & advanced metrics ---
-    bench_prices = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
-    bench_stats, beta_results, alpha_tracking, sortino_results, cvar_results = "", {}, {}, {}, {}
-    rolling_beta_summary = {}
+    # --- Benchmark Integration ---
+    bench_stats = ""
+    beta_results = {}
+    if benchmark:
+        bench_prices = download_close_prices([benchmark], period="1y")
+        if not bench_prices.empty:
+            bench_returns = compute_returns(bench_prices)
+            bench_var = historical_var(bench_returns.iloc[:, 0], alpha=0.05)
+            bench_vol = bench_returns.std().iloc[0] * np.sqrt(252)
+            bench_dd = max_drawdown(bench_prices.iloc[:, 0])
+            bench_name = benchmark
+            bench_stats = (
+                f"\nBenchmark ({bench_name}) — VaR(5%): {bench_var:.2%}, "
+                f"Volatility: {bench_vol:.2%}, Max Drawdown: {bench_dd:.2%}\n"
+            )
 
-    if not bench_prices.empty:
-        bench_returns = compute_returns(bench_prices).iloc[:, 0]
-        bench_var = historical_var(bench_returns, alpha=0.05)
-        bench_vol = bench_returns.std() * np.sqrt(252)
-        bench_dd = max_drawdown(bench_prices.iloc[:, 0])
-        bench_ret = (bench_prices.iloc[-1] / bench_prices.iloc[0] - 1).iloc[0]
-        bench_stats = (
-            f"\nBenchmark ({benchmark}) — Return: {bench_ret:.2%}, "
-            f"VaR(5%): {bench_var:.2%}, Volatility: {bench_vol:.2%}, Max Drawdown: {bench_dd:.2%}"
-        )
-
-        for s in returns.columns:
-            asset = returns[s]
-            beta_results[s] = compute_beta(asset, bench_returns)
-            # Compute alpha & tracking error for each stock vs benchmark
-            a_t = compute_alpha_tracking_error(asset, bench_returns)
-            alpha_tracking[s] = a_t
-            sortino_results[s] = sortino_ratio(asset)
-            cvar_results[s] = expected_shortfall(asset, alpha=0.05)
-            # Rolling beta summary (mean ± std)
-            rb = rolling_beta(asset, bench_returns, window=63, symbol=s)
-            if not rb.empty:
-                rolling_beta_summary[s] = {"mean_beta": rb.mean(), "beta_stability": rb.std()}
-            else:
-                rolling_beta_summary[s] = {"mean_beta": np.nan, "beta_stability": np.nan}
-
-    # --- Stress tests ---
-    stress_summary = ""
-    if not bench_prices.empty:
-        # Simple -10% benchmark shock
-        betas = {s: compute_beta(returns[s], bench_returns) for s in returns.columns}
-        shock_res = stress_test_shock(returns.columns.tolist(), returns, bench_returns, shock_pct=-0.10, betas=betas)
-        worst_hit = sorted(shock_res.items(), key=lambda x: x[1])[:3]
-        stress_summary += "**Simulated -10% Benchmark Shock (expected P&L impact):**\n"
-        for s, est in shock_res.items():
-            stress_summary += f"- {s}: {est:.2%}\n"
-        stress_summary += "\n**Most sensitive assets:** " + ", ".join([w[0] for w in worst_hit]) + "\n"
-
-        # Historical analogs
-        scenarios = stress_test_historical_analogs(symbols, close_df, bench_prices.iloc[:, 0], window=30, top_n=2)
-        if scenarios:
-            stress_summary += "\n**Historical Analog Scenarios:**\n"
-            for scen in scenarios:
-                stress_summary += f"- {scen['start'].date()} → {scen['end'].date()}, Benchmark drop {scen['bench_drop']:.2%}\n"
+            # Compute betas vs benchmark
+            for s in returns.columns:
+                beta_results[s] = compute_beta(returns[s], bench_returns.iloc[:, 0])
+        else:
+            for s in returns.columns:
+                beta_results[s] = np.nan
     else:
-        stress_summary += "No benchmark data available for stress testing.\n"
+        for s in returns.columns:
+            beta_results[s] = np.nan
 
-    # --- Correlation matrix ---
-    corr = returns.corr().round(2)
+    # --- Correlation Matrix ---
+    corr = returns.corr().round(3).to_dict()
 
-    # --- Agent prompt assembly ---
+    # --- Prompt Building ---
     prompt = f"""
-You are **RiskAnalystAgent**, performing an advanced, benchmark-aware risk evaluation.
+You are **RiskAnalystAgent**, analyzing portfolio and security-level risk in the **{country}** market.
 
-**Country/Region:** {country}  
-**Benchmark:** {benchmark}
+Selected benchmark: **{benchmark}**
 
-### 🧩 Summary Metrics
-{bench_stats}
+### Asset Risk Metrics
+VaR (5%) per asset:
+"""
+    for s, v in var_results.items():
+        prompt += f"- {s}: {v:.2%}\n"
 
-### ⚙️ Asset-Level Risk Metrics
-| Asset | VaR(5%) | Volatility | Max Drawdown |
-|:------|---------:|------------:|--------------:|
-""" + "\n".join(
-        [f"| {s} | {var_results[s]:.2%} | {vol_results[s]:.2%} | {mdd_results[s]:.2%} |" for s in returns.columns]
-    )
+    prompt += "\nMax Drawdown (peak-to-trough):\n"
+    for s, v in mdd_results.items():
+        prompt += f"- {s}: {v:.2%}\n"
 
-    prompt += "\n\n### 📈 Advanced Metrics (vs Benchmark)\n"
-    for s in returns.columns:
-        at = alpha_tracking.get(s, {})
-        prompt += f"- {s}: β={beta_results.get(s, np.nan):.2f}, α={at.get('alpha_annual', np.nan):.2%}, TrackingErr={at.get('tracking_error_annual', np.nan):.2%}, Sortino={sortino_results.get(s, np.nan):.2f}, CVaR={cvar_results.get(s, np.nan):.2%}\n"
+    prompt += "\nAnnualized Volatility (σ):\n"
+    for s, v in vol_results.items():
+        prompt += f"- {s}: {v:.2%}\n"
 
-    prompt += "\n\n### 🔄 Rolling Beta Stability\n"
-    for s, d in rolling_beta_summary.items():
-        prompt += f"- {s}: Mean β={d['mean_beta']:.2f}, Stability (σβ)={d['beta_stability']:.2f}\n"
+    # Include benchmark metrics if available
+    if bench_stats:
+        prompt += f"\n### Benchmark Risk Summary\n{bench_stats}"
+        prompt += "\n### Beta (vs Benchmark):\n"
+        for s, b in beta_results.items():
+            if not np.isnan(b):
+                prompt += f"- {s}: {b:.2f}\n"
 
-    prompt += "\n\n### 💥 Stress Tests\n" + stress_summary
+    prompt += "\n### Correlation Matrix (rounded):\n"
+    for s, row in corr.items():
+        row_items = ", ".join([f"{k}:{v}" for k, v in row.items()])
+        prompt += f"- {s}: {row_items}\n"
 
-    prompt += "\n### 🔗 Correlation Matrix (1-year returns):\n" + corr.to_markdown()
-
+    # --- Region-specific Instructions ---
     prompt += f"""
----
+### Instructions:
+Interpret these risk metrics for the **{country}** market context:
+- Discuss whether market volatility, drawdown, and VaR are high or low relative to the **{benchmark}**.
+- Explain if risk levels suggest a **risk-on** or **risk-off** environment regionally.
+- Highlight any **benchmark-relative exposures** (e.g., beta > 1 → more sensitive than the benchmark).
+- Mention **correlation clusters** or **sector concentration** effects if visible.
+- Note regional influences (e.g., policy shifts, currency volatility, geopolitical risks).
 
-### 🧠 Your Tasks:
-1. Identify high-risk vs stable assets based on these metrics.
-2. Highlight benchmark-relative exposures (β > 1, α < 0, high Tracking Error).
-3. Discuss whether the market environment is **risk-on** or **risk-off**.
-4. Provide **Rationale** and **Recommendation** clearly for portfolio risk management.
-
-Be concise but technically deep — this report will feed the TeamLeadAgent.
+Structure your answer as:
+**Summary**, **Rationale**, and **Recommendation**.
 """
 
     response = AGENTS["RiskAnalystAgent"].run(prompt)
     return response.content
+
 
 def run_portfolio_agent(symbols, close_df, benchmark="^GSPC", constraints=None, country="United States"):
     """
@@ -1170,102 +1150,83 @@ if api_key:
 elif api_key_env:
     os.environ["GOOGLE_API_KEY"] = api_key_env
 
-tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlation","AI Dashboard", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
+tabs = st.tabs(["User Guide", "Overview", "Company Deep Dives", "Risk & Correlation", "Portfolio Strategist", "Chat Assistant", "Audit & Exports"])
 
 # --- User Guide Tab ---
 with tabs[0]:
     st.markdown("""
-    Welcome to **AI Market Intelligence**, a multi-agent, benchmark-aware financial analytics system powered by **Gemini AI**.  
-    This app combines data science, econometrics, and explainable AI (XAI) to analyze **markets, companies, risk, and portfolios** — even if you’re new to finance.
+    Welcome to **AI Market Intelligence**, a multi-agent financial analysis system powered by Gemini AI.  
+    This platform helps you understand markets, companies, risks, and optimal portfolio allocations — even if you have **no prior finance background**.
 
     ---
     """)
 
     st.header("🎯 What This App Does")
     st.markdown("""
-    The platform uses specialized **AI agents** that collaborate like a professional investment research team:
-    - Each agent handles a unique analytical domain.
-    - All results are **benchmark- and region-aware**.
-    - The **TeamLeadAgent** integrates insights into a unified, audit-ready investment report.
+    The app uses a set of specialized AI agents to analyze stocks, markets, and portfolios.  
+    Each agent focuses on one domain — quantitative metrics, company fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines them into a single benchmark-aware investment report.
 
     **Here’s what happens when you run the full orchestration:**
-    1. **Market & price data** are fetched from Yahoo Finance.
-    2. **News headlines** are analyzed for tone and sentiment.
-    3. **AI agents** run independently (Market, Company, Risk, Portfolio, etc.).
-    4. The **TeamLeadAgent** merges outputs into a professional institutional report.
-    5. Optional: Generate **PDF exports**, visualize **correlations, volatility, alpha**, and run **stress tests**.
-
-    ---
+    - Data is downloaded from Yahoo Finance (prices, returns, volatility)
+    - News headlines are analyzed for tone and bias
+    - AI agents run independent analyses (Market, Risk, Sentiment, etc.)
+    - The TeamLeadAgent synthesizes all insights into a professional report
     """)
 
     st.subheader("👥 Agents and Their Roles")
     st.markdown("""
-    | Agent | Description | Example Insight |
+    | Agent | Description | Output Example |
     |--------|--------------|----------------|
-    | **MarketAnalystAgent** | Quantitative analyst — studies prices, returns, volatility, and market regime trends. | “Market regime appears risk-on with momentum-driven rotation into tech.” |
-    | **CompanyResearchAgent** | Fundamental analyst — interprets financials, earnings, catalysts, and risks. | “AAPL shows strong cash flow and resilient margins despite FX headwinds.” |
-    | **SentimentAgent** | Behavioral analyst — evaluates tone and bias in financial news. | “Sentiment score +0.28; positive tone following earnings beat.” |
-    | **RiskAnalystAgent** | Quant + risk expert — measures VaR, drawdown, beta, tracking error, and tail risk. | “TSLA: High beta (1.45), CVaR -3.8%, tracking error 6.2%.” |
-    | **PortfolioStrategistAgent** | Portfolio manager — designs optimal allocations (equal-weight, risk-parity, momentum tilt). | “Rebalance quarterly; overweight growth sectors, underweight cyclicals.” |
-    | **TeamLeadAgent** | Integrator — compiles all agent outputs into one cohesive benchmark-aware market report. | “Portfolio alpha +2.1% vs S&P 500; stable Sortino ratio 1.35.” |
-
-    ---
+    | **MarketAnalystAgent** | Quantitative analyst — studies prices, trends, volatility, market regime. | “Market regime appears risk-on with tech outperforming.” |
+    | **CompanyResearchAgent** | Company fundamentals & financial health. | “AAPL has strong margins and stable earnings growth.” |
+    | **SentimentAgent** | Evaluates news tone and sentiment from headlines. | “Media sentiment mildly positive (+0.22).” |
+    | **RiskAnalystAgent** | Measures risk (VaR, drawdown, beta, correlation). | “TSLA shows high beta (1.4) and largest drawdown.” |
+    | **PortfolioStrategistAgent** | Suggests allocations (equal-weight, risk-parity, momentum-tilt). | “Allocate 40% AAPL, 35% GOOG, 25% TSLA.” |
+    | **TeamLeadAgent** | Integrates all insights into a detailed investment report. | “Portfolio outperformed S&P 500 with lower volatility.” |
     """)
+
+    st.markdown("---")
 
     st.header("⚙️ How to Use the App")
     st.markdown("""
-    1. **Select a Country/Region** in the sidebar.  
-       - Benchmarks and exchange suffixes are automatically configured (e.g., `.NS` for India, `.L` for UK).  
-    2. **Enter stock symbols** — e.g.:
-       - `AAPL`, `TSLA`, `GOOG` for the U.S.
-       - `INFY`, `TCS.NS`, `RELIANCE.NS` for India
-    3. **Choose a benchmark** (e.g., `^GSPC`, `^N225`, `^BSESN`).
-    4. **Explore the tabs:**
-       - **Overview:** Charts + MarketAnalystAgent insights  
-       - **Company Deep Dives:** Fundamental & sentiment analysis per firm  
-       - **Risk & Correlation:** Volatility, drawdown, correlation, and advanced metrics  
-       - **Portfolio Strategist:** Allocation and optimization proposals  
-       - **Chat Assistant:** Ask natural-language questions  
-       - **Audit & Exports:** Full benchmark-aware report generation
+    1. **Enter stock symbols** in the sidebar — e.g.:
+       - `AAPL` (Apple)
+       - `TSLA` (Tesla)
+       - `GOOG` (Alphabet/Google)
+       - You can enter multiple tickers separated by commas.
+    2. **Select a benchmark** — a market index to compare performance against:
+       - Default: `^GSPC` → S&P 500 (broad U.S. market)
+       - Others: `^DJI` (Dow Jones), `^NDX` (Nasdaq 100), `^IXIC` (Nasdaq Composite)
+    3. **Explore Tabs:**
+       - **Overview:** Historical prices & MarketAnalystAgent.
+       - **Company Deep Dives:** Company research & sentiment.
+       - **Risk & Correlation:** Risk metrics, drawdown, volatility heatmaps.
+       - **Portfolio Strategist:** Allocation recommendations.
+       - **Chat Assistant:** Ask natural language queries.
+       - **Audit & Exports:** Generate benchmark-aware reports.
     """)
 
     st.markdown("---")
 
-    st.header("🧮 Advanced Quantitative Analytics")
+    st.header("💬 Key Financial Terminologies (Plain English Guide)")
     st.markdown("""
-    The **Risk & Correlation** tab now includes advanced analytics used by institutional quants:
+    ### 🔢 Stock Market Basics
+    - **Stock / Equity:** Ownership share in a company.
+    - **Ticker Symbol:** Short code to identify a stock (e.g., `AAPL` = Apple).
+    - **Index / Benchmark:** A collection of stocks used to represent the market (e.g., S&P 500).
+    - **ETF (Exchange-Traded Fund):** A fund that tracks an index (like `SPY` for S&P 500).
+    - **Price:** The latest traded value of a stock.
+    - **Return:** The percentage change in price over a period.
 
-    | Metric | Description | Interpretation |
-    |----------|-------------|----------------|
-    | **Alpha (α)** | Excess return vs benchmark after adjusting for beta. | Positive alpha = outperformance. |
-    | **Beta (β)** | Sensitivity to benchmark moves. | β > 1 → more volatile than benchmark. |
-    | **Tracking Error** | Std. deviation of excess returns. | High = active deviation from index. |
-    | **Sortino Ratio** | Return per unit of downside risk. | Better for asymmetric risk profiles. |
-    | **CVaR (Expected Shortfall)** | Tail loss beyond VaR threshold. | Measures average of worst losses. |
-    | **Rolling Beta** | 63-day beta over time. | Shows stability or volatility of correlation. |
-    | **Drawdown Chart** | Visualizes largest price declines vs peaks. | Reveals historical stress points. |
-    | **Stress Tests** | Simulate -10% shocks and past crisis periods. | Estimates impact on each stock. |
-    | **Sector Exposure** | Aggregate portfolio weight by sector. | Shows diversification & concentration. |
-
-    These metrics are computed live and also fed into the **RiskAnalystAgent** for contextual reasoning.
-    """)
-
-    st.markdown("---")
-
-    st.header("💬 Key Financial & Risk Terminology (Simplified)")
-    st.markdown("""
-    ### 📊 Market & Risk Terms
-    - **Volatility (σ):** How much prices move; higher = riskier.  
-    - **Max Drawdown:** Largest peak-to-trough loss — stress indicator.  
-    - **VaR (Value at Risk):** Worst expected loss with a given confidence level.  
-    - **CVaR (Expected Shortfall):** Average of losses worse than VaR.  
-    - **Alpha (α):** Outperformance after risk adjustment.  
-    - **Beta (β):** Benchmark sensitivity.  
-    - **Tracking Error:** How much the portfolio deviates from benchmark returns.  
-    - **Sortino Ratio:** Reward per unit of downside risk.  
-    - **Correlation:** Degree of co-movement between assets.  
-    - **Stress Test:** Scenario analysis simulating market shocks.  
-    - **Risk-on / Risk-off:** Market preference for risky vs safe assets.
+    ### 📊 Market & Performance Metrics
+    - **Volatility:** How much prices fluctuate. High = risky, Low = stable.
+    - **Standard Deviation:** The math measure behind volatility.
+    - **Drawdown:** The percentage fall from a recent peak — measures loss severity.
+    - **Beta (β):** Sensitivity to market moves. β > 1 = more volatile than market, β < 1 = less volatile.
+    - **Alpha (α):** Return in excess of the benchmark.
+    - **Sharpe Ratio:** Risk-adjusted performance = (Return - Risk-free rate) / Volatility.
+    - **VaR (Value at Risk):** Worst expected loss (e.g., “5% VaR = can lose 3% or more 5% of the time”).
+    - **Max Drawdown:** Largest observed drop in value — a stress test of performance.
 
     ### 💰 Company & Fundamental Terms
     - **Market Cap:** Total company value = price × shares outstanding.
@@ -1277,6 +1238,12 @@ with tabs[0]:
     - **Debt-to-Equity Ratio:** Measures leverage (how much debt the company has).
     - **Dividend Yield:** Annual dividend / price — investor income measure.
 
+    ### 💬 Behavioral & Sentiment Terms
+    - **Market Sentiment:** Overall tone (bullish = optimistic, bearish = pessimistic).
+    - **Headline Sentiment:** News tone score from -1 (negative) to +1 (positive).
+    - **Catalyst:** Event that might move prices (e.g., earnings release, product launch).
+    - **Momentum:** Recent trend strength — stocks going up tend to keep rising (short term).
+
     ### ⚖️ Portfolio & Risk Terms
     - **Diversification:** Holding different assets to reduce risk.
     - **Correlation:** How assets move relative to each other (-1 = opposite, +1 = together).
@@ -1287,6 +1254,20 @@ with tabs[0]:
     - **Tracking Error:** How much a portfolio deviates from its benchmark.
     - **Benchmark-relative Return:** Outperformance or underperformance vs. the benchmark.
 
+    ### 🏦 Economic & Market Context
+    - **Risk-on Environment:** Investors prefer stocks and higher risk assets.
+    - **Risk-off Environment:** Investors seek safety (bonds, gold, cash).
+    - **Interest Rates:** Cost of borrowing money — affects valuations.
+    - **Inflation:** Rate at which prices increase — reduces purchasing power.
+    - **Yield Curve:** Shows interest rates for bonds of different maturities.
+    - **Recession:** Period of declining economic activity.
+    - **Market Regime:** Overall condition of market (bullish, bearish, volatile, stable).
+
+    ### 🧠 AI & Analytical Concepts
+    - **Agent:** An autonomous AI process that performs a specific analytical role.
+    - **Multi-Agent System:** Several AI agents collaborating — like departments in a research team.
+    - **Prompt:** The instructions given to each AI model (e.g., “Analyze volatility trends”).
+    - **Explainability (XAI):** Making AI reasoning transparent and auditable.
     """)
 
     st.markdown("---")
@@ -1301,7 +1282,7 @@ with tabs[0]:
     | **Market & Benchmark Overview** | Context on how markets and your stocks performed vs benchmark. |
     | **Company Deep Dives** | Company fundamentals and financial analysis. |
     | **Sentiment Insights** | News tone and behavioral signals. |
-    | **Risk Assessment** | Includes VaR, CVaR, Sortino, Tracking Error, and correlation context. |
+    | **Risk Assessment** | VaR, drawdown, volatility, and correlation results. |
     | **Portfolio Strategy** | AI’s allocation recommendation with rationale. |
     | **Recommendations** | Actionable buy/hold/sell or weighting guidance. |
     | **Audit Trail** | Lists which AI agent produced which section. |
@@ -1312,35 +1293,29 @@ with tabs[0]:
 
     st.markdown("---")
 
-    st.header("🔍 Global Benchmarks Supported")
+    st.header("🔍 Examples of Benchmarks You Can Use")
     st.markdown("""
-    This app supports **40+ countries and regions**, each mapped to appropriate market benchmarks and exchange suffixes.
-
-    | Region | Example Benchmarks | Suffix |
-    |---------|-------------------|--------|
-    | 🇺🇸 United States | S&P 500 (^GSPC), Nasdaq 100 (^NDX), Dow Jones (^DJI) | — |
-    | 🇮🇳 India | BSE Sensex (^BSESN), Nifty 50 (^NSEI) | .NS / .BO |
-    | 🇬🇧 UK | FTSE 100 (^FTSE), FTSE 250 (^FTMC) | .L |
-    | 🇯🇵 Japan | Nikkei 225 (^N225), TOPIX (^TOPX) | .T |
-    | 🇨🇦 Canada | S&P/TSX Composite (^GSPTSE) | .TO |
-    | 🇭🇰 Hong Kong | Hang Seng (^HSI), HSTECH (^HSTECH) | .HK |
-    | 🇪🇺 Europe | STOXX 50 (^STOXX50E), DAX (^GDAXI), CAC 40 (^FCHI) | — |
-    | 🇧🇷 Brazil | Ibovespa (^BVSP) | .SA |
-    | 🇸🇬 Singapore | Straits Times (^STI) | .SI |
-    | 🇦🇺 Australia | ASX 200 (^AXJO) | .AX |
-
-    (Additional support for emerging markets like South Africa, Saudi Arabia, Mexico, etc.)
+    - `^GSPC` — S&P 500 (broad U.S. market)  
+    - `^DJI` — Dow Jones Industrial Average  
+    - `^NDX` — Nasdaq 100 (tech-heavy)  
+    - `^IXIC` — Nasdaq Composite  
+    - `^RUT` — Russell 2000 (small caps)  
+    - `^FTSE` — UK FTSE 100  
+    - `^N225` — Nikkei 225 (Japan)  
+    - `^HSI` — Hang Seng Index (Hong Kong)  
+    - `^STOXX50E` — Euro Stoxx 50 (Europe)
     """)
 
     st.markdown("---")
+
     st.header("🧠 AI Model Notes")
     st.markdown("""
-    - Uses **Google Gemini 2.0 Flash** for reasoning and report synthesis.  
-    - Each agent operates independently and contextually.  
-    - The **RiskAnalystAgent** now integrates advanced metrics like Alpha, CVaR, Sortino, and Stress Tests.  
-    - The **TeamLeadAgent** merges all outputs into a coherent institutional report.  
-    - All sections are benchmark-aware and traceable to their AI source.  
+    - The app uses **Google Gemini 2.0** models for reasoning.  
+    - Each agent uses tailored prompts to focus on its domain.
+    - The **TeamLeadAgent** merges analyses into a human-readable markdown report.
+    - All outputs are auditable — sections are labeled by the agent that created them.
     """)
+
     st.markdown("---")
 
     st.header("💡 Tips for Beginners")
@@ -1547,517 +1522,8 @@ with tabs[3]:
                 df_es["Sortino"] = df_es["Sortino"].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "N/A")
                 st.table(df_es[["CVaR_pct","Sortino"]])
 
-
-# --- AI Dashboard Tab (REPLACE the existing AI Dashboard block) ---
-with tabs[4]:
-    st.header("📈 AI Market Intelligence Dashboard (Interactive + Agent-Routed)")
-
-    # --- Helper: Chart-to-Agent routing and conversation functions ---
-    CHART_ROUTING = {
-        "cum_returns_1y": "TeamLeadAgent",
-        "alpha_beta_scatter": "RiskAnalystAgent",
-        "rolling_corr_63": "RiskAnalystAgent",
-        "alloc_comparison": "PortfolioStrategistAgent",
-        "sector_treemap": "CompanyResearchAgent",
-        "stress_test_10pct": "RiskAnalystAgent",
-        "efficient_frontier": "PortfolioStrategistAgent",
-        "risk_contribution": "RiskAnalystAgent",
-        "rolling_sharpe_63": "RiskAnalystAgent",
-        "market_regime": "MarketAnalystAgent",
-        "monte_carlo": "RiskAnalystAgent"
-    }
-
-    def ask_gemini_for_chart(chart_id: str, chart_desc: str, chart_stats: str, user_message: str = None, agent_override: str = None, prior_history=None):
-        """
-        Routes a chart analysis or chat question to the appropriate specialized agent.
-        Returns the agent's markdown text. Keeps the same agent for chart_id unless override provided.
-        """
-        agent_name = agent_override or CHART_ROUTING.get(chart_id, "MarketAnalystAgent")
-        agent = AGENTS.get(agent_name)
-        if agent is None:
-            return f"Error: Agent '{agent_name}' not available."
-
-        # Build prompt including prior conversation (to maintain context) and the current user message if provided
-        history_txt = ""
-        if prior_history:
-            # prior_history is list of (role, text) tuples
-            for role, text in prior_history:
-                # include previous user messages and assistant (agent) answers
-                history_txt += f"\n[{role}]\n{text}\n"
-
-        prompt = f"""
-You are **{agent_name}**, a specialized analyst.
-
-Chart: {chart_id}
-Description: {chart_desc}
-
-Chart stats & key numbers:
-{chart_stats}
-
-Conversation history and context:
-{history_txt}
-
-Instructions:
-- Provide a concise, clear, and actionable interpretation of the chart (3-6 sentences).
-- Highlight the main signal(s), the primary risk(s), and one actionable recommendation.
-- When the user asks follow-up questions, answer them referencing the chart context and the above stats.
-- Provide short suggested follow-up questions the user can ask next.
-
-Return the answer in Markdown. Keep responses audit-friendly and labeled where appropriate.
-"""
-        if user_message:
-            prompt += f"\nUser question: {user_message}\n"
-
-        try:
-            resp = agent.run(prompt)
-            # agent.run in your code returns an object with .content
-            return getattr(resp, "content", str(resp))
-        except Exception as e:
-            return f"Agent {agent_name} call failed: {e}"
-
-    def init_chart_session(chart_key):
-        """Ensure chat history exists in session_state for a chart."""
-        hist_key = f"chart_chat_{chart_key}_history"
-        agent_key = f"chart_chat_{chart_key}_agent"
-        if hist_key not in st.session_state:
-            st.session_state[hist_key] = []  # list of (role, text)
-        if agent_key not in st.session_state:
-            st.session_state[agent_key] = CHART_ROUTING.get(chart_key, "MarketAnalystAgent")
-
-    def post_user_message(chart_key, user_text, chart_desc, chart_stats):
-        """Append user message and call agent, saving response into session_state history."""
-        hist_key = f"chart_chat_{chart_key}_history"
-        init_chart_session(chart_key)
-        st.session_state[hist_key].append(("User", user_text))
-        agent_name = st.session_state[f"chart_chat_{chart_key}_agent"]
-        # call agent with prior history
-        reply = ask_gemini_for_chart(chart_key, chart_desc, chart_stats, user_message=user_text, agent_override=agent_name, prior_history=st.session_state[hist_key])
-        st.session_state[hist_key].append((agent_name, reply))
-        return reply
-
-    # ---------------------- Data & baseline computations ----------------------
-    close_df_dash = download_close_prices(symbols, period="1y")
-    bench_prices_dash = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
-    returns_dash = compute_returns(close_df_dash) if not close_df_dash.empty else pd.DataFrame()
-
-    if close_df_dash.empty:
-        st.warning("No price data available for visualization. Add symbols or change the period.")
-    else:
-        # Layout using columns for compact UI
-        # Row 1: Cumulative returns + Alpha vs Beta
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.subheader("1) Cumulative Returns vs Benchmark (1Y)")
-            cum = (1 + returns_dash).cumprod()
-            fig_cum = go.Figure()
-            for c in cum.columns:
-                fig_cum.add_trace(go.Scatter(x=cum.index, y=cum[c], mode="lines", name=c, hovertemplate="%{y:.2f}<extra></extra>"))
-            if not bench_prices_dash.empty:
-                bench_ret = compute_returns(bench_prices_dash).iloc[:, 0]
-                bench_cum = (1 + bench_ret).cumprod()
-                fig_cum.add_trace(go.Scatter(x=bench_cum.index, y=bench_cum.values, mode="lines", name=f"{benchmark}", line=dict(width=3, dash="dash")))
-            fig_cum.update_layout(template="plotly_white", yaxis_title="Growth (1 = 0%)", height=420)
-            st.plotly_chart(fig_cum, use_container_width=True)
-
-            # chart stats for agent prompt
-            cum_stats = ""
-            try:
-                last_vals = cum.iloc[-1].to_dict()
-                cum_stats += "Latest cumulative growth:\n"
-                for k, v in last_vals.items():
-                    cum_stats += f"- {k}: {v:.2f}\n"
-                if not bench_prices_dash.empty:
-                    cum_stats += f"Benchmark final growth: {bench_cum.iloc[-1]:.2f}\n"
-            except Exception:
-                cum_stats = "Insufficient series data."
-
-            # Chat area for this chart (TeamLeadAgent)
-            chart_key = "cum_returns_1y"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (TeamLeadAgent)**")
-            # show history
-            hist_key = f"chart_chat_{chart_key}_history"
-            for role, text in st.session_state[hist_key]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-
-            user_in = st.text_input("Ask about this chart...", key=f"input_{chart_key}")
-            if st.button("Send to TeamLeadAgent", key=f"send_{chart_key}"):
-                if user_in.strip():
-                    reply = post_user_message(chart_key, user_in.strip(), "Cumulative returns vs benchmark (1y)", cum_stats)
-                    st.experimental_rerun()
-
-        with col2:
-            st.subheader("2) Alpha vs Beta Scatter")
-            # compute betas & alphas vs benchmark
-            if not bench_prices_dash.empty and not returns_dash.empty:
-                bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
-                betas = {}
-                alphas = {}
-                for c in returns_dash.columns:
-                    res = compute_alpha_tracking_error(returns_dash[c], bench_ret_full)
-                    betas[c] = res["beta"]
-                    alphas[c] = res["alpha_annual"]
-
-                fig_ab = go.Figure()
-                fig_ab.add_trace(go.Scatter(
-                    x=list(betas.values()), y=list(alphas.values()),
-                    mode="markers+text", text=list(betas.keys()), textposition="top center", marker=dict(size=10)
-                ))
-                fig_ab.update_layout(xaxis_title="Beta (Market Sensitivity)", yaxis_title="Alpha (Annualized)", template="plotly_white", height=420)
-                st.plotly_chart(fig_ab, use_container_width=True)
-                ab_stats = "Alpha & Beta for each asset:\n" + "\n".join([f"- {k}: β={betas[k]:.3f}, α={alphas[k]:.2%}" for k in betas])
-            else:
-                st.info("Benchmark data required for Alpha/Beta scatter.")
-                ab_stats = "No benchmark data."
-
-            # Chat area for this chart (RiskAnalystAgent)
-            chart_key = "alpha_beta_scatter"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_ab = st.text_input("Ask about alpha/beta...", key=f"input_{chart_key}")
-            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
-                if user_in_ab.strip():
-                    _ = post_user_message(chart_key, user_in_ab.strip(), "Alpha vs Beta scatter (annualized alpha vs beta)", ab_stats)
-                    st.experimental_rerun()
-
-        st.markdown("---")
-
-        # Row 2: Rolling correlation & Allocation comparison
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("3) Rolling 63-Day Correlation vs Benchmark")
-            if not bench_prices_dash.empty:
-                bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
-                fig_corr_roll = go.Figure()
-                for c in returns_dash.columns:
-                    roll_corr = returns_dash[c].rolling(63).corr(bench_ret_full)
-                    fig_corr_roll.add_trace(go.Scatter(x=roll_corr.index, y=roll_corr.values, mode="lines", name=c))
-                fig_corr_roll.update_layout(template="plotly_white", yaxis_title="Correlation", title="63-Day Rolling Correlation", height=420)
-                st.plotly_chart(fig_corr_roll, use_container_width=True)
-                corr_stats = "Rolling 63-day correlation computed vs benchmark."
-            else:
-                st.info("Benchmark data required for rolling correlation.")
-                corr_stats = "No benchmark data."
-
-            # Chat (RiskAnalystAgent)
-            chart_key = "rolling_corr_63"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_corr = st.text_input("Ask about rolling correlation...", key=f"input_{chart_key}")
-            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
-                if user_in_corr.strip():
-                    _ = post_user_message(chart_key, user_in_corr.strip(), "63-day rolling correlation vs benchmark", corr_stats)
-                    st.experimental_rerun()
-
-        with c2:
-            st.subheader("4) Allocation Comparison: Equal • Risk-Parity • Momentum")
-            # allocation pies
-            equal = {s: 1/len(symbols) for s in symbols}
-            vols = returns_dash.std() * np.sqrt(252)
-            invvol = (1 / vols)
-            invvol = (invvol / invvol.sum()).round(4).to_dict()
-            six_month = close_df_dash.pct_change(126).iloc[-1] if close_df_dash.shape[0] > 126 else close_df_dash.pct_change().iloc[-1]
-            mom = six_month.clip(lower=-1).fillna(0)
-            if mom.sum() == 0:
-                mom_alloc = equal
-            else:
-                mom_alloc = (mom / mom.sum()).round(4).to_dict()
-
-            fig_alloc = go.Figure()
-            fig_alloc.add_trace(go.Pie(labels=list(equal.keys()), values=list(equal.values()), domain=dict(x=[0, .33]), name="Equal Weight"))
-            fig_alloc.add_trace(go.Pie(labels=list(invvol.keys()), values=list(invvol.values()), domain=dict(x=[.33, .66]), name="Risk Parity"))
-            fig_alloc.add_trace(go.Pie(labels=list(mom_alloc.keys()), values=list(mom_alloc.values()), domain=dict(x=[.66, 1]), name="Momentum"))
-            fig_alloc.update_layout(title="Equal • Risk-Parity • Momentum Allocations", height=420)
-            st.plotly_chart(fig_alloc, use_container_width=True)
-            alloc_stats = f"Equal: {equal}\nRisk-parity (inv-vol): {invvol}\nMomentum: {mom_alloc}"
-
-            # Chat (PortfolioStrategistAgent)
-            chart_key = "alloc_comparison"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (PortfolioStrategistAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_alloc = st.text_input("Ask portfolio strategist...", key=f"input_{chart_key}")
-            if st.button("Send to PortfolioStrategistAgent", key=f"send_{chart_key}"):
-                if user_in_alloc.strip():
-                    _ = post_user_message(chart_key, user_in_alloc.strip(), "Allocation comparison: Equal, Risk-Parity (inv-vol), Momentum (6M)", alloc_stats)
-                    st.experimental_rerun()
-
-        st.markdown("---")
-
-        # Row 3: Sector treemap + Stress test
-        r1, r2 = st.columns(2)
-        with r1:
-            st.subheader("5) Sector Exposure Treemap")
-            sector_weights = compute_sector_exposure(symbols, weights={s:1/len(symbols) for s in symbols})
-            df_sector = pd.DataFrame({"Sector": list(sector_weights.keys()), "Weight": list(sector_weights.values())})
-            fig_tree = go.Figure(go.Treemap(labels=df_sector["Sector"], parents=["Portfolio"] * len(df_sector), values=df_sector["Weight"]))
-            fig_tree.update_layout(template="plotly_white", height=420)
-            st.plotly_chart(fig_tree, use_container_width=True)
-            treemap_stats = "\n".join([f"- {k}: {v:.2%}" for k, v in sector_weights.items()])
-
-            # Chat (CompanyResearchAgent)
-            chart_key = "sector_treemap"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (CompanyResearchAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_tree = st.text_input("Ask about sector exposure...", key=f"input_{chart_key}")
-            if st.button("Send to CompanyResearchAgent", key=f"send_{chart_key}"):
-                if user_in_tree.strip():
-                    _ = post_user_message(chart_key, user_in_tree.strip(), "Sector exposure treemap based on yfinance metadata", treemap_stats)
-                    st.experimental_rerun()
-
-        with r2:
-            st.subheader("6) Stress Test: -10% Benchmark Shock Impact")
-            if not bench_prices_dash.empty:
-                bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
-                betas_calc = {s: compute_beta(returns_dash[s], bench_ret_full) for s in symbols}
-                shock = stress_test_shock(symbols, returns_dash, bench_ret_full, shock_pct=-0.10, betas=betas_calc)
-                df_shock = pd.DataFrame({"Symbol": list(shock.keys()), "Impact (%)": [v * 100 for v in shock.values()]})
-                fig_shock = go.Figure(go.Bar(x=df_shock["Symbol"], y=df_shock["Impact (%)"]))
-                fig_shock.update_layout(yaxis_title="Estimated Loss (%)", template="plotly_white", height=420)
-                st.plotly_chart(fig_shock, use_container_width=True)
-                shock_stats = "\n".join([f"- {k}: {v:.2%}" for k, v in shock.items()])
-            else:
-                st.info("Benchmark data required for stress testing.")
-                shock_stats = "No benchmark data."
-
-            # Chat (RiskAnalystAgent)
-            chart_key = "stress_test_10pct"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_stress = st.text_input("Ask about stress test...", key=f"input_{chart_key}")
-            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
-                if user_in_stress.strip():
-                    _ = post_user_message(chart_key, user_in_stress.strip(), "Simulated -10% benchmark shock impact", shock_stats)
-                    st.experimental_rerun()
-
-        st.markdown("---")
-
-        # Row 4: Efficient frontier (left) & Risk contribution (right)
-        e1, e2 = st.columns(2)
-        with e1:
-            st.subheader("7) Efficient Frontier (Mean-Variance Optimization)")
-            def portfolio_performance(weights, mean_returns, cov_matrix):
-                ret = np.dot(weights, mean_returns) * 252
-                vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
-                return vol, ret
-
-            def efficient_frontier(returns, num_points=40):
-                mean_returns = returns.mean()
-                cov_matrix = returns.cov()
-                # use a simple random search for weights (for practicality)
-                results = {"vol": [], "ret": [], "weights": []}
-                n = len(mean_returns)
-                rng = np.random.default_rng(0)
-                for target in np.linspace(mean_returns.min(), mean_returns.max(), num_points):
-                    best_vol = 1e9
-                    best = None
-                    for _ in range(3000):  # randomized search
-                        w = rng.random(n)
-                        w = w / w.sum()
-                        vol, ret = portfolio_performance(w, mean_returns, cov_matrix)
-                        if abs(ret - target) < 0.01 and vol < best_vol:
-                            best_vol = vol
-                            best = (ret, vol, w)
-                    if best:
-                        results["ret"].append(best[0])
-                        results["vol"].append(best[1])
-                        results["weights"].append(best[2])
-                return results
-
-            if len(symbols) <= 6:
-                frontier = efficient_frontier(returns_dash)
-                fig_ef = go.Figure()
-                fig_ef.add_trace(go.Scatter(x=frontier["vol"], y=frontier["ret"], mode="markers", name="Efficient Frontier"))
-                eq_w = np.array([1/len(symbols)] * len(symbols))
-                eq_vol, eq_ret = portfolio_performance(eq_w, returns_dash.mean(), returns_dash.cov())
-                fig_ef.add_trace(go.Scatter(x=[eq_vol], y=[eq_ret], mode="markers", name="Equal Weight", marker=dict(size=12, symbol="star")))
-                fig_ef.update_layout(xaxis_title="Volatility (Annualized)", yaxis_title="Expected Return (Annualized)", template="plotly_white", height=420)
-                st.plotly_chart(fig_ef, use_container_width=True)
-                ef_stats = f"Efficient frontier computed (random-search). Points: {len(frontier['ret'])}"
-            else:
-                st.info("Efficient frontier limited to ≤ 6 assets for tractability.")
-                ef_stats = "Not computed (too many assets)."
-
-            # Chat (PortfolioStrategistAgent)
-            chart_key = "efficient_frontier"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (PortfolioStrategistAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_ef = st.text_input("Ask about efficient frontier...", key=f"input_{chart_key}")
-            if st.button("Send to PortfolioStrategistAgent", key=f"send_{chart_key}"):
-                if user_in_ef.strip():
-                    _ = post_user_message(chart_key, user_in_ef.strip(), "Efficient frontier (mean-variance optimization)", ef_stats)
-                    st.experimental_rerun()
-
-        with e2:
-            st.subheader("8) Risk Contribution (Equal-Weight Portfolio)")
-            cov = returns_dash.cov()
-            weights = np.array([1/len(symbols)] * len(symbols))
-            port_vol = np.sqrt(weights @ cov @ weights)
-            if port_vol == 0:
-                risk_contrib = np.zeros(len(symbols))
-            else:
-                risk_contrib = weights * (cov @ weights) / port_vol
-            df_rc = pd.DataFrame({"Symbol": symbols, "Contribution (%)": (risk_contrib * 100)})
-            fig_rc = go.Figure(go.Bar(x=df_rc["Symbol"], y=df_rc["Contribution (%)"], marker=dict(line=dict(width=1))))
-            fig_rc.update_layout(yaxis_title="Portfolio Risk Contribution (%)", template="plotly_white", height=420)
-            st.plotly_chart(fig_rc, use_container_width=True)
-            rc_stats = "\n".join([f"- {s}: {v:.2f}%" for s, v in zip(df_rc["Symbol"], df_rc["Contribution (%)"])])
-
-            # Chat (RiskAnalystAgent)
-            chart_key = "risk_contribution"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_rc = st.text_input("Ask about risk contribution...", key=f"input_{chart_key}")
-            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
-                if user_in_rc.strip():
-                    _ = post_user_message(chart_key, user_in_rc.strip(), "Risk contribution breakdown for equal-weight portfolio", rc_stats)
-                    st.experimental_rerun()
-
-        st.markdown("---")
-
-        # Row 5: Rolling Sharpe & Market Regime
-        s1, s2 = st.columns(2)
-        with s1:
-            st.subheader("9) Rolling Sharpe Ratio (63-Day)")
-            window = 63
-            roll_sharpe_fig = go.Figure()
-            for c in returns_dash.columns:
-                roll_ret = returns_dash[c].rolling(window).mean() * 252
-                roll_vol = returns_dash[c].rolling(window).std() * np.sqrt(252)
-                rs = roll_ret / roll_vol
-                roll_sharpe_fig.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=c))
-            roll_sharpe_fig.update_layout(template="plotly_white", yaxis_title="Sharpe Ratio", height=420)
-            st.plotly_chart(roll_sharpe_fig, use_container_width=True)
-            rs_stats = "Rolling 63-day Sharpe for each asset."
-
-            # Chat (RiskAnalystAgent)
-            chart_key = "rolling_sharpe_63"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_rs = st.text_input("Ask about rolling Sharpe...", key=f"input_{chart_key}")
-            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
-                if user_in_rs.strip():
-                    _ = post_user_message(chart_key, user_in_rs.strip(), "Rolling 63-day Sharpe ratio", rs_stats)
-                    st.experimental_rerun()
-
-        with s2:
-            st.subheader("10) Market Regime Detection (Volatility Regimes)")
-            bench_ret_reg = compute_returns(bench_prices_dash).iloc[:,0] if not bench_prices_dash.empty else None
-            if bench_ret_reg is not None:
-                roll_vol = bench_ret_reg.rolling(63).std() * np.sqrt(252)
-                thresholds = roll_vol.quantile([0.33, 0.66])
-                low, high = thresholds[0.33], thresholds[0.66]
-                fig_reg = go.Figure()
-                fig_reg.add_trace(go.Scatter(x=roll_vol.index, y=roll_vol.values, mode="lines", name="Volatility"))
-                fig_reg.add_hrect(y0=0, y1=low, fillcolor="green", opacity=0.12, line_width=0)
-                fig_reg.add_hrect(y0=low, y1=high, fillcolor="yellow", opacity=0.12, line_width=0)
-                fig_reg.add_hrect(y0=high, y1=roll_vol.max(), fillcolor="red", opacity=0.12, line_width=0)
-                fig_reg.update_layout(title="Market Regime via Volatility", yaxis_title="Annualized Volatility", template="plotly_white", height=420)
-                st.plotly_chart(fig_reg, use_container_width=True)
-                regime_stats = f"Volatility quantiles: low={low:.2%}, high={high:.2%}"
-            else:
-                st.info("Benchmark data required for regime detection.")
-                regime_stats = "No benchmark data."
-
-            # Chat (MarketAnalystAgent)
-            chart_key = "market_regime"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (MarketAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_reg = st.text_input("Ask about market regime...", key=f"input_{chart_key}")
-            if st.button("Send to MarketAnalystAgent", key=f"send_{chart_key}"):
-                if user_in_reg.strip():
-                    _ = post_user_message(chart_key, user_in_reg.strip(), "Market regime detection via benchmark rolling volatility", regime_stats)
-                    st.experimental_rerun()
-
-        st.markdown("---")
-
-        # Row 6: Monte Carlo Simulation
-        st.subheader("11) Monte Carlo Simulation (1-Year)")
-        symbol_mc = st.selectbox("Select symbol for simulation", symbols, key="mc_symbol_select")
-        last_price = close_df_dash[symbol_mc].iloc[-1]
-        vol_mc = returns_dash[symbol_mc].std() * np.sqrt(252)
-        mu_mc = returns_dash[symbol_mc].mean() * 252
-        days = st.number_input("Simulation days", value=252, min_value=30, max_value=252*2, step=1, key="mc_days")
-        paths = st.number_input("Simulation paths", value=200, min_value=10, max_value=2000, step=10, key="mc_paths")
-        if st.button("Run Monte Carlo", key="run_mc"):
-            sim_paths = np.zeros((days, paths))
-            rng = np.random.default_rng(42)
-            for i in range(paths):
-                daily = rng.normal(mu_mc/days, vol_mc/np.sqrt(days), days)
-                sim_paths[:, i] = last_price * np.cumprod(1 + daily)
-            fig_mc = go.Figure()
-            for i in range(paths):
-                fig_mc.add_trace(go.Scatter(x=np.arange(days), y=sim_paths[:, i], mode="lines", showlegend=False, line=dict(width=1)))
-            fig_mc.update_layout(title=f"Monte Carlo Price Simulation: {symbol_mc}", template="plotly_white", height=450)
-            st.plotly_chart(fig_mc, use_container_width=True)
-            mc_stats = f"Simulated {paths} paths over {days} days for {symbol_mc}. μ={mu_mc:.2%}, σ={vol_mc:.2%}"
-
-            # Chat (RiskAnalystAgent)
-            chart_key = "monte_carlo"
-            init_chart_session(chart_key)
-            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
-            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
-                if role == "User":
-                    st.markdown(f"**You:** {text}")
-                else:
-                    st.markdown(f"**{role}:** {text}")
-            user_in_mc = st.text_input("Ask about Monte Carlo results...", key=f"input_{chart_key}")
-            if st.button("Send to RiskAnalystAgent_MC", key=f"send_{chart_key}_mc"):
-                if user_in_mc.strip():
-                    _ = post_user_message(chart_key, user_in_mc.strip(), f"Monte Carlo simulation for {symbol_mc}", mc_stats)
-                    st.experimental_rerun()
-
-
-
 # --- Portfolio Strategist Tab ---
-with tabs[5]:
+with tabs[4]:
     st.header("Portfolio Strategist — Allocation Proposals")
     close_df_port = download_close_prices(symbols, period="1y")
     constraints_raw = st.text_input("Constraints (json) e.g. {'max_weight':0.4}", "")
@@ -2072,7 +1538,7 @@ with tabs[5]:
             st.markdown(strategy_text)
 
 # --- Chat Assistant Tab ---
-with tabs[6]:
+with tabs[5]:
     st.header("Natural Language Research Assistant")
     st.markdown("Ask the system — it will route to an appropriate agent and return text + visuals when applicable.")
     user_query = st.text_input("Enter your question (e.g., 'Show me volatility trends for the S&P 500 in the last year')", "")
@@ -2100,7 +1566,7 @@ with tabs[6]:
                             st.markdown(text)
 
 # --- Audit & Exports Tab ---
-with tabs[7]:
+with tabs[6]:
     st.header("Audit Trail & Report Generation")
     st.markdown("Run all agents together, integrate results, and generate a benchmark-aware TeamLead report.")
 
