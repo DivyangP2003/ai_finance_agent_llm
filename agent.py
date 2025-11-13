@@ -1187,7 +1187,7 @@ with tabs[0]:
     Each agent focuses on one domain — quantitative metrics, company fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines them into a single benchmark-aware investment report.
 
     **Here’s what happens when you run the full orchestration:**
-    - Historical price data is fetched from **Yahoo Finance**
+    - Historical price data is fetched from `Yahoo Finance`
     - Country-specific **exchange suffixes** are automatically added to your tickers  
     - Market-appropriate **benchmarks** (e.g., S&P 500, Nifty 50, Nikkei 225) are applied  
     - Region-aware **RSS news feeds** are analyzed for sentiment  
