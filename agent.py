@@ -2015,22 +2015,38 @@ Guidelines:
     # -------------------------------------------------
     # User Input
     # -------------------------------------------------
-    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
-
-    if st.button("Send") and user_input:
+    # Track last submitted message to prevent double-send
+    if "last_message" not in st.session_state:
+        st.session_state["last_message"] = ""
+    
+    user_input = st.text_input(
+        "Ask anything about markets, stocks or portfolio:",
+        key="chat_input"
+    )
+    
+    # When user presses Enter, text_input updates immediately
+    if user_input and user_input != st.session_state["last_message"]:
+    
+        # Save last message to avoid re-trigger
+        st.session_state["last_message"] = user_input
+    
         # Add user message
         st.session_state["chat_history"].append(("user", user_input))
-
+    
         # Build prompt
         prompt = build_contextual_prompt(user_input)
-
+    
         # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
-
-        # Add AI message
+    
+        # Add assistant response
         st.session_state["chat_history"].append(("assistant", ai_reply))
-
+    
+        # Clear input box
+        st.session_state["chat_input"] = ""
+    
         st.rerun()
+
 
 
 # --- Audit & Exports Tab ---
