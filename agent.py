@@ -2065,7 +2065,7 @@ Instructions:
             answer = response.content
 
             st.session_state["chart_chat_history"].append(("assistant", answer))
-            st.sidebar.experimental_rerun()
+            st.rerun()
 
         # Clear button
         if st.sidebar.button("Clear explanation"):
