@@ -1919,7 +1919,7 @@ with tabs[6]:
     # -------------------------------------------------
     # Safe Chat Rendering (prevents HTML injection)
     # -------------------------------------------------
-        def render_chat():
+    def render_chat():
         for role, msg in st.session_state["chat_history"]:
             is_user = role == "user"
     
