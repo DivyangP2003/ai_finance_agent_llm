@@ -1920,7 +1920,7 @@ with tabs[6]:
     def render_message(role, markdown_text):
         bg = USER_COLOR if role == "user" else AI_COLOR
         label = "You" if role == "user" else "AI"
-    
+
         st.markdown(
             f"""
             <div style="
@@ -1934,34 +1934,14 @@ with tabs[6]:
                 <div style="font-weight:600; margin-bottom:6px; opacity:0.9;">
                     {label}
                 </div>
-    
+
                 <div style="font-size:15px; line-height:1.6;">
                     {markdown_text}
                 </div>
             </div>
             """,
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
-
-
-        # Now render markdown **under** the bubble header
-        container = st.container()
-        with container:
-            st.markdown(
-                f"""
-                <div style="
-                    background:{bg};
-                    padding:6px 18px 14px 18px;
-                    margin-top:-18px;
-                    margin-bottom:6px;
-                    border-radius:0 0 12px 12px;
-                    color:{TEXT_COLOR};
-                ">
-                """,
-                unsafe_allow_html=True
-            )
-            st.markdown(markdown_text)  # <-- Markdown enabled safely
-            st.markdown("</div>", unsafe_allow_html=True)
 
     # Render all chat messages
     for role, msg in st.session_state["chat_history"]:
