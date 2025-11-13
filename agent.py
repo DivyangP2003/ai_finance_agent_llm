@@ -1531,8 +1531,21 @@ with tabs[4]:
     bench_prices_dash = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
     returns_dash = compute_returns(close_df_dash) if not close_df_dash.empty else pd.DataFrame()
 
-    # Utility: cache Gemini explanations to avoid repeated model calls for same prompt
-    @st.cache_data(ttl=60 * 60)  # cache for 1 hour
+    # --------------------- State initialization ---------------------
+    if "gemini_chart_explanation" not in st.session_state:
+        st.session_state["gemini_chart_explanation"] = None
+
+    if "gemini_chart_meta" not in st.session_state:
+        st.session_state["gemini_chart_meta"] = None
+
+    if "active_chart_context" not in st.session_state:
+        st.session_state["active_chart_context"] = None
+
+    if "chart_chat_history" not in st.session_state:
+        st.session_state["chart_chat_history"] = []
+
+    # --------------------- Gemini cached call ---------------------
+    @st.cache_data(ttl=60 * 60)
     def get_gemini_explanation(prompt: str, agent_name: str = "MarketAnalystAgent") -> str:
         try:
             resp = AGENTS[agent_name].run(prompt)
@@ -1540,7 +1553,7 @@ with tabs[4]:
         except Exception as e:
             return f"⚠️ Gemini call failed: {e}"
 
-    # Small helper to create the Ask-Gemini prompt
+    # --------------------- Helper: build prompt ---------------------
     def build_chart_prompt(title: str, chart_notes: str, numeric_summary: dict, symbols_list: list):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
         summary_lines = "\n".join([f"- {k}: {v}" for k, v in numeric_summary.items()])
@@ -1556,27 +1569,26 @@ Key numeric summary:
 {summary_lines}
 
 Tasks (concise, markdown):
-1. Provide a short plain-language Summary of the chart (3-4 sentences).
-2. Highlight 3 Key Observations / Patterns (bullet list).
-3. Provide 2 Risk Signals or red flags (if any).
-4. Give 2 short Recommendations or actions (benchmark-relative if possible).
-5. Provide a short confidence line (e.g., "Confidence: moderate — based on 1-year daily data").
+1. Provide a short plain-language Summary (3–4 sentences).
+2. Highlight 3 Key Observations (bullets).
+3. Provide 2 Risk Signals.
+4. Give 2 short Recommendations (benchmark-relative if possible).
+5. Add a short confidence line.
 
 Return in markdown with sections: Summary, Observations, Risks, Recommendations, Confidence.
 """
         return prompt
 
-    # Sidebar area where Gemini answers will be displayed
-    st.sidebar.header("Gemini Chart Explanation")
-    if "gemini_chart_explanation" not in st.session_state:
-        st.session_state["gemini_chart_explanation"] = None
-        st.session_state["gemini_chart_meta"] = None
-
+    # ======================================================================
+    # MAIN DASHBOARD
+    # ======================================================================
     if not close_df_dash.empty:
-        # Layout: two columns for top charts
+
         col1, col2 = st.columns([2, 1])
 
-        # ---------------------- Cumulative Returns vs Benchmark ----------------------
+        # -----------------------------------------------------------
+        # 1. CUMULATIVE RETURNS
+        # -----------------------------------------------------------
         with col1:
             st.subheader("Cumulative Returns vs Benchmark (1Y)")
 
@@ -1584,37 +1596,56 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
             fig_cum = go.Figure()
             for c in cum.columns:
                 fig_cum.add_trace(go.Scatter(x=cum.index, y=cum[c], mode="lines", name=c))
+
             if not bench_prices_dash.empty:
                 bench_ret = compute_returns(bench_prices_dash).iloc[:, 0]
                 bench_cum = (1 + bench_ret).cumprod()
-                fig_cum.add_trace(go.Scatter(x=bench_cum.index, y=bench_cum.values, mode="lines",
-                                             name=f"{benchmark}", line=dict(width=3, dash="dash")))
+                fig_cum.add_trace(go.Scatter(
+                    x=bench_cum.index,
+                    y=bench_cum.values,
+                    mode="lines",
+                    name=f"{benchmark}",
+                    line=dict(width=3, dash="dash")
+                ))
 
             fig_cum.update_layout(template="plotly_white", yaxis_title="Growth (1 = 0%)")
             st.plotly_chart(fig_cum, use_container_width=True)
 
-            # Gemini button
+            # ---- Button ----
             if st.button("Ask Gemini about this chart — Cumulative Returns", key="ask_cum"):
-                # prepare short numeric summary
-                numeric = {}
-                for c in cum.columns:
-                    numeric[f"{c} (1Y)"] = f"{(cum[c].iloc[-1] - 1):.2%}"
+                numeric = {f"{c} (1Y)": f"{(cum[c].iloc[-1] - 1):.2%}" for c in cum.columns}
                 if not bench_prices_dash.empty:
                     numeric[f"{benchmark} (1Y)"] = f"{(bench_cum.iloc[-1] - 1):.2%}"
+
                 prompt = build_chart_prompt(
                     "Cumulative Returns vs Benchmark (1Y)",
                     "Shows indexed cumulative returns for selected symbols vs benchmark.",
                     numeric,
                     symbols
                 )
-                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+
+                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt)
                 st.session_state["gemini_chart_meta"] = {"chart": "Cumulative Returns", "time": datetime.now().isoformat()}
 
-        # ---------------------- Alpha vs Beta Scatter ----------------------
+                # ---- Store chart context for sidebar chat ----
+                st.session_state["active_chart_context"] = {
+                    "title": "Cumulative Returns vs Benchmark (1Y)",
+                    "symbols": symbols,
+                    "benchmark": benchmark,
+                    "numeric": numeric,
+                    "notes": "Indexed cumulative performance vs benchmark.",
+                    "timestamp": datetime.now().isoformat(),
+                }
+                st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 2. ALPHA VS BETA SCATTER
+        # -----------------------------------------------------------
         with col2:
             st.subheader("Alpha vs Beta Scatter")
-            betas = {}
-            alphas = {}
+
+            betas, alphas = {}, {}
             if not bench_prices_dash.empty and not returns_dash.empty:
                 bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
                 for c in returns_dash.columns:
@@ -1631,58 +1662,86 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                     textposition="top center"
                 ))
                 fig_ab.update_layout(
-                    xaxis_title="Beta (Market Sensitivity)",
+                    xaxis_title="Beta",
                     yaxis_title="Alpha (Annualized)",
                     template="plotly_white",
                     height=420
                 )
                 st.plotly_chart(fig_ab, use_container_width=True)
+
             else:
-                st.info("Benchmark data required for Alpha vs Beta chart.")
+                st.info("Benchmark required.")
 
             if st.button("Ask Gemini about this chart — Alpha vs Beta", key="ask_ab"):
                 numeric = {c: f"β={betas.get(c, np.nan):.2f}, α={alphas.get(c, np.nan):.2%}" for c in betas.keys()}
                 prompt = build_chart_prompt(
                     "Alpha vs Beta Scatter",
-                    "Scatter of asset beta vs alpha relative to selected benchmark.",
+                    "Scatter of asset beta vs alpha relative to benchmark.",
                     numeric,
                     symbols
                 )
-                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+
+                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt)
                 st.session_state["gemini_chart_meta"] = {"chart": "Alpha vs Beta", "time": datetime.now().isoformat()}
 
-        # ---------------------- Rolling Correlation vs Benchmark ----------------------
+                st.session_state["active_chart_context"] = {
+                    "title": "Alpha vs Beta Scatter",
+                    "symbols": symbols,
+                    "benchmark": benchmark,
+                    "numeric": numeric,
+                    "notes": "Beta (market sensitivity) vs annualized alpha.",
+                    "timestamp": datetime.now().isoformat(),
+                }
+                st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 3. ROLLING CORRELATION
+        # -----------------------------------------------------------
         st.subheader("Rolling 63-Day Correlation vs Benchmark")
+
         if not bench_prices_dash.empty and not returns_dash.empty:
             bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+
             fig_corr_roll = go.Figure()
+            numeric = {}
             for c in returns_dash.columns:
                 roll_corr = returns_dash[c].rolling(63).corr(bench_ret_full)
                 fig_corr_roll.add_trace(go.Scatter(x=roll_corr.index, y=roll_corr.values, mode="lines", name=c))
-            fig_corr_roll.update_layout(template="plotly_white", yaxis_title="Correlation", title="63-Day Rolling Correlation")
+
+                if not roll_corr.empty:
+                    numeric[f"{c} last"] = f"{roll_corr.iloc[-1]:.2f}"
+                    numeric[f"{c} mean"] = f"{roll_corr.mean():.2f}"
+
+            fig_corr_roll.update_layout(template="plotly_white", yaxis_title="Correlation")
             st.plotly_chart(fig_corr_roll, use_container_width=True)
-        else:
-            st.info("Benchmark data required for rolling correlation.")
 
         if st.button("Ask Gemini about this chart — Rolling Correlation", key="ask_corr"):
-            # build numeric summary: last corr + mean corr for each symbol
-            numeric = {}
-            if not bench_prices_dash.empty:
-                for c in returns_dash.columns:
-                    roll = returns_dash[c].rolling(63).corr(compute_returns(bench_prices_dash).iloc[:,0])
-                    numeric[f"{c} last"] = f"{roll.iloc[-1]:.2f}" if not roll.empty else "N/A"
-                    numeric[f"{c} mean"] = f"{roll.mean():.2f}" if not roll.empty else "N/A"
             prompt = build_chart_prompt(
                 "Rolling 63-Day Correlation vs Benchmark",
-                "Rolling correlation between each asset and the benchmark over 63-day windows.",
+                "Rolling correlation between each asset and benchmark.",
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt)
             st.session_state["gemini_chart_meta"] = {"chart": "Rolling Correlation", "time": datetime.now().isoformat()}
 
-        # ---------------------- Allocation Pie Charts ----------------------
-        st.subheader("Portfolio Allocation Comparison (Equal • Risk-Parity • Momentum)")
+            st.session_state["active_chart_context"] = {
+                "title": "Rolling 63-Day Correlation",
+                "symbols": symbols,
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Correlation using 63-day windows.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 4. PORTFOLIO ALLOCATION PIE CHARTS
+        # -----------------------------------------------------------
+        st.subheader("Portfolio Allocation Comparison")
+
         if not returns_dash.empty:
             equal = {s: 1/len(symbols) for s in symbols}
             vols = returns_dash.std() * np.sqrt(252)
@@ -1693,79 +1752,115 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
             mom = mom.round(4).to_dict()
 
             fig_alloc = go.Figure()
-            fig_alloc.add_trace(go.Pie(labels=list(equal.keys()), values=list(equal.values()), domain=dict(x=[0, .33]), name="Equal Weight"))
+            fig_alloc.add_trace(go.Pie(labels=list(equal.keys()), values=list(equal.values()), domain=dict(x=[0, .33]), name="Equal"))
             fig_alloc.add_trace(go.Pie(labels=list(invvol.keys()), values=list(invvol.values()), domain=dict(x=[.33, .66]), name="Risk Parity"))
             fig_alloc.add_trace(go.Pie(labels=list(mom.keys()), values=list(mom.values()), domain=dict(x=[.66, 1]), name="Momentum"))
-            fig_alloc.update_layout(title="Equal • Risk-Parity • Momentum Allocations")
             st.plotly_chart(fig_alloc, use_container_width=True)
-        else:
-            st.info("Need at least 1 symbol with data to show allocations.")
 
         if st.button("Ask Gemini about this chart — Allocations", key="ask_alloc"):
-            numeric = {}
-            if returns_dash is not None and not returns_dash.empty:
-                numeric["Equal"] = ", ".join([f"{k}:{v:.2%}" for k,v in equal.items()])
-                numeric["RiskParity"] = ", ".join([f"{k}:{v:.2%}" for k,v in invvol.items()])
-                numeric["Momentum"] = ", ".join([f"{k}:{v:.2%}" for k,v in mom.items()])
+            numeric = {
+                "Equal": ", ".join([f"{k}:{v:.2%}" for k,v in equal.items()]),
+                "RiskParity": ", ".join([f"{k}:{v:.2%}" for k,v in invvol.items()]),
+                "Momentum": ", ".join([f"{k}:{v:.2%}" for k,v in mom.items()])
+            }
             prompt = build_chart_prompt(
                 "Portfolio Allocation Comparison",
-                "Three pie charts showing Equal-weight, Risk-parity (inverse vol), and Momentum-tilt allocations.",
+                "Equal-weight, inverse-volatility, momentum allocations.",
                 numeric,
                 symbols
             )
             st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
             st.session_state["gemini_chart_meta"] = {"chart": "Allocations", "time": datetime.now().isoformat()}
 
-        # ---------------------- Sector Exposure Treemap ----------------------
+            st.session_state["active_chart_context"] = {
+                "title": "Portfolio Allocation Comparison",
+                "symbols": symbols,
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Three allocation styles: Equal, Risk-Parity, Momentum.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 5. SECTOR EXPOSURE TREEMAP
+        # -----------------------------------------------------------
         st.subheader("Sector Exposure Treemap")
-        sector_weights = compute_sector_exposure(symbols, weights={s:1/len(symbols) for s in symbols}) if symbols else {}
+
+        sector_weights = compute_sector_exposure(symbols, weights={s:1/len(symbols) for s in symbols})
         if sector_weights:
             df_sector = pd.DataFrame({"Sector": list(sector_weights.keys()), "Weight": list(sector_weights.values())})
-            fig_tree = go.Figure(go.Treemap(labels=df_sector["Sector"], parents=["Portfolio"] * len(df_sector), values=df_sector["Weight"]))
-            fig_tree.update_layout(template="plotly_white")
+            fig_tree = go.Treemap(labels=df_sector["Sector"], parents=["Portfolio"] * len(df_sector), values=df_sector["Weight"])
+            fig_tree = go.Figure(fig_tree)
             st.plotly_chart(fig_tree, use_container_width=True)
-        else:
-            st.info("Sector metadata not available for selected symbols.")
 
         if st.button("Ask Gemini about this chart — Sector Exposure", key="ask_sector"):
             numeric = {k: f"{v:.2%}" for k,v in sector_weights.items()}
             prompt = build_chart_prompt(
                 "Sector Exposure Treemap",
-                "Treemap showing portfolio weight by sector based on yfinance metadata.",
+                "Portfolio weight distribution by sector.",
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt)
             st.session_state["gemini_chart_meta"] = {"chart": "Sector Exposure", "time": datetime.now().isoformat()}
 
-        # ---------------------- Stress Test Bar Chart ----------------------
+            st.session_state["active_chart_context"] = {
+                "title": "Sector Exposure Treemap",
+                "symbols": symbols,
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Sector weights from yfinance metadata.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 6. STRESS TEST
+        # -----------------------------------------------------------
         st.subheader("Stress Test: -10% Benchmark Shock Impact")
+
         if not bench_prices_dash.empty:
             bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
             betas_calc = {s: compute_beta(returns_dash[s], bench_ret_full) for s in symbols}
             shock = stress_test_shock(symbols, returns_dash, bench_ret_full, shock_pct=-0.10, betas=betas_calc)
+
             df_shock = pd.DataFrame({"Symbol": list(shock.keys()), "Impact (%)": [v * 100 for v in shock.values()]})
-            fig_shock = go.Figure(go.Bar(x=df_shock["Symbol"], y=df_shock["Impact (%)"] ))
+            fig_shock = go.Figure(go.Bar(x=df_shock["Symbol"], y=df_shock["Impact (%)"]))
             fig_shock.update_layout(yaxis_title="Estimated Loss (%)", template="plotly_white")
             st.plotly_chart(fig_shock, use_container_width=True)
-        else:
-            st.info("Benchmark required for stress test.")
 
         if st.button("Ask Gemini about this chart — Stress Test", key="ask_stress"):
-            numeric = {s: f"{shock.get(s, np.nan):.2%}" for s in symbols} if 'shock' in locals() else {}
+            numeric = {s: f"{shock.get(s, np.nan):.2%}" for s in symbols}
             prompt = build_chart_prompt(
                 "Stress Test: -10% Benchmark Shock Impact",
-                "Bar chart estimating immediate P&L impact given a -10% benchmark shock using betas/correlation.",
+                "Bar chart estimating loss given -10% market shock.",
                 numeric,
                 symbols
             )
             st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="RiskAnalystAgent")
             st.session_state["gemini_chart_meta"] = {"chart": "Stress Test", "time": datetime.now().isoformat()}
 
-        # ---------------------- Efficient Frontier (if small universe) ----------------------
+            st.session_state["active_chart_context"] = {
+                "title": "Stress Test: -10% Shock",
+                "symbols": symbols,
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Risk impact using beta or correlation.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 7. EFFICIENT FRONTIER
+        # -----------------------------------------------------------
         st.subheader("Efficient Frontier (Mean-Variance Preview)")
+
         if len(symbols) <= 5 and not returns_dash.empty:
-            # Use your existing simple frontier builder (keeps tractable)
+
             def portfolio_performance(weights, mean_returns, cov_matrix):
                 ret = np.dot(weights, mean_returns) * 252
                 vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
@@ -1773,120 +1868,212 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
 
             mean_returns = returns_dash.mean()
             cov_matrix = returns_dash.cov()
-            # Sample random portfolios instead of combinatorial enumeration (fast and interactive)
+
             n_points = 150
-            rets = []
-            vols = []
-            weights_list = []
-            rng = np.random.default_rng(seed=42)
+            rets, vols = [], []
+            rng = np.random.default_rng(42)
             for _ in range(n_points):
                 w = rng.random(len(mean_returns))
                 w = w / w.sum()
                 vol, ret = portfolio_performance(w, mean_returns, cov_matrix)
-                rets.append(ret)
                 vols.append(vol)
-                weights_list.append(w)
+                rets.append(ret)
 
             fig_ef = go.Figure()
-            fig_ef.add_trace(go.Scatter(x=vols, y=rets, mode="markers", name="Portfolios", marker=dict(opacity=0.7)))
+            fig_ef.add_trace(go.Scatter(x=vols, y=rets, mode="markers", name="Portfolios"))
             eq_w = np.array([1/len(symbols)] * len(symbols))
             eq_vol, eq_ret = portfolio_performance(eq_w, mean_returns, cov_matrix)
             fig_ef.add_trace(go.Scatter(x=[eq_vol], y=[eq_ret], mode="markers", name="Equal Weight", marker=dict(size=12, symbol="star")))
-            fig_ef.update_layout(xaxis_title="Volatility (Annualized)", yaxis_title="Expected Return (Annualized)", template="plotly_white")
+            fig_ef.update_layout(template="plotly_white", xaxis_title="Volatility", yaxis_title="Return")
             st.plotly_chart(fig_ef, use_container_width=True)
-        else:
-            st.info("Efficient frontier preview limited to ≤ 5 assets and requires data.")
 
         if st.button("Ask Gemini about this chart — Efficient Frontier", key="ask_ef"):
-            numeric = {"Sample portfolios": n_points if 'n_points' in locals() else "N/A", "EqualWeight": f"Vol:{eq_vol:.3f}, Ret:{eq_ret:.3f}"}
+            numeric = {"Sample portfolios": n_points, "EqualWeight": f"Vol:{eq_vol:.3f}, Ret:{eq_ret:.3f}"}
             prompt = build_chart_prompt(
-                "Efficient Frontier (Mean-Variance Preview)",
-                "Cloud of randomly sampled portfolios (mean-variance) with an equal-weight marker.",
+                "Efficient Frontier",
+                "Random portfolio samples with equal-weight marker.",
                 numeric,
                 symbols
             )
             st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
             st.session_state["gemini_chart_meta"] = {"chart": "Efficient Frontier", "time": datetime.now().isoformat()}
 
-        # ---------------------- Rolling Sharpe Ratio ----------------------
+            st.session_state["active_chart_context"] = {
+                "title": "Efficient Frontier (Preview)",
+                "symbols": symbols,
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Mean-variance simulation with random weights.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
+
+
+        # -----------------------------------------------------------
+        # 8. ROLLING SHARPE RATIO
+        # -----------------------------------------------------------
         st.subheader("Rolling Sharpe Ratio (63-Day)")
+
         if not returns_dash.empty:
-            roll_sharpe_fig = go.Figure()
-            window = 63
+            fig_rs = go.Figure()
+            numeric = {}
             for c in returns_dash.columns:
-                roll_ret = returns_dash[c].rolling(window).mean() * 252
-                roll_vol = returns_dash[c].rolling(window).std() * np.sqrt(252)
-                rs = roll_ret / roll_vol
-                roll_sharpe_fig.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=c))
-            roll_sharpe_fig.update_layout(template="plotly_white", yaxis_title="Sharpe Ratio")
-            st.plotly_chart(roll_sharpe_fig, use_container_width=True)
-        else:
-            st.info("Data required to compute rolling Sharpe.")
+                rs = (returns_dash[c].rolling(63).mean()*252) / (returns_dash[c].rolling(63).std()*np.sqrt(252))
+                fig_rs.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=c))
+                if not rs.empty:
+                    numeric[f"{c} last_sharpe"] = f"{rs.iloc[-1]:.3f}"
+
+            fig_rs.update_layout(template="plotly_white", yaxis_title="Sharpe Ratio")
+            st.plotly_chart(fig_rs, use_container_width=True)
 
         if st.button("Ask Gemini about this chart — Rolling Sharpe", key="ask_rs"):
-            numeric = {}
-            if not returns_dash.empty:
-                for c in returns_dash.columns:
-                    rs = (returns_dash[c].rolling(63).mean()*252) / (returns_dash[c].rolling(63).std()*np.sqrt(252))
-                    numeric[f"{c} last_sharpe"] = f"{rs.iloc[-1]:.3f}" if not rs.empty else "N/A"
             prompt = build_chart_prompt(
                 "Rolling Sharpe Ratio (63-Day)",
-                "Rolling Sharpe ratio per asset using 63-day windows (annualized).",
+                "Sharpe ratio using 63D rolling windows.",
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt)
             st.session_state["gemini_chart_meta"] = {"chart": "Rolling Sharpe", "time": datetime.now().isoformat()}
 
-        # ---------------------- Monte Carlo Simulation ----------------------
-        st.subheader("Monte Carlo Simulation (1-Year)")
-        symbol_mc = st.selectbox("Select symbol for simulation", symbols, key="mc_symbol_select")
-        last_price = close_df_dash[symbol_mc].iloc[-1]
-        vol_mc = returns_dash[symbol_mc].std() * np.sqrt(252)
-        mu_mc = returns_dash[symbol_mc].mean() * 252
-        days = 252
-        paths = 200
-        sim_paths = np.zeros((days, paths))
-        rng = np.random.default_rng(seed=1)
-        for i in range(paths):
-            daily = rng.normal(mu_mc/days, vol_mc/np.sqrt(days), days)
-            sim_paths[:, i] = last_price * np.cumprod(1 + daily)
+            st.session_state["active_chart_context"] = {
+                "title": "Rolling Sharpe Ratio",
+                "symbols": symbols,
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Rolling risk-adjusted returns.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
 
-        fig_mc = go.Figure()
-        for i in range(min(paths, 100)):  # show at most 100 lines for performance
-            fig_mc.add_trace(go.Scatter(x=np.arange(days), y=sim_paths[:, i], mode="lines", showlegend=False, line=dict(width=1)))
-        fig_mc.update_layout(title=f"Monte Carlo Price Simulation: {symbol_mc}", template="plotly_white")
-        st.plotly_chart(fig_mc, use_container_width=True)
+
+        # -----------------------------------------------------------
+        # 9. MONTE CARLO
+        # -----------------------------------------------------------
+        st.subheader("Monte Carlo Simulation (1-Year)")
+
+        if symbols:
+            symbol_mc = st.selectbox("Select symbol for simulation", symbols, key="mc_symbol_select")
+            last_price = close_df_dash[symbol_mc].iloc[-1]
+            vol_mc = returns_dash[symbol_mc].std() * np.sqrt(252)
+            mu_mc = returns_dash[symbol_mc].mean() * 252
+
+            days = 252
+            paths = 200
+            sim_paths = np.zeros((days, paths))
+            rng = np.random.default_rng(1)
+            for i in range(paths):
+                daily = rng.normal(mu_mc/days, vol_mc/np.sqrt(days), days)
+                sim_paths[:, i] = last_price * np.cumprod(1 + daily)
+
+            fig_mc = go.Figure()
+            for i in range(100):
+                fig_mc.add_trace(go.Scatter(x=np.arange(days), y=sim_paths[:, i], mode="lines", showlegend=False))
+            fig_mc.update_layout(title=f"Monte Carlo Price Simulation: {symbol_mc}", template="plotly_white")
+            st.plotly_chart(fig_mc, use_container_width=True)
 
         if st.button("Ask Gemini about this chart — Monte Carlo", key="ask_mc"):
             numeric = {
-                "last_price": f"{last_price:.2f}",
-                "mu_ann": f"{mu_mc:.2%}",
-                "vol_ann": f"{vol_mc:.2%}",
-                "paths": paths
+                "Last price": f"{last_price:.2f}",
+                "Annual Return (μ)": f"{mu_mc:.2%}",
+                "Annual Vol (σ)": f"{vol_mc:.2%}",
+                "Simulated Paths": paths
             }
             prompt = build_chart_prompt(
                 f"Monte Carlo Simulation: {symbol_mc}",
-                "Simulated price paths for the next 1 year using geometric random-walk assumptions (normal returns).",
+                "Geometric random-walk simulation with 252 trading days.",
                 numeric,
                 [symbol_mc]
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt)
             st.session_state["gemini_chart_meta"] = {"chart": f"Monte Carlo ({symbol_mc})", "time": datetime.now().isoformat()}
 
-    else:
-        st.info("No data available for visualization in the dashboard. Provide symbols and a benchmark to enable charts.")
+            st.session_state["active_chart_context"] = {
+                "title": f"Monte Carlo Simulation — {symbol_mc}",
+                "symbols": [symbol_mc],
+                "benchmark": benchmark,
+                "numeric": numeric,
+                "notes": "Stochastic price paths via normal returns.",
+                "timestamp": datetime.now().isoformat(),
+            }
+            st.session_state["chart_chat_history"] = []
 
-    # ---------------------- Sidebar: show the Gemini response when available ----------------------
+    else:
+        st.info("No data available. Provide symbols and benchmark.")
+
+
+    # ======================================================================
+    # SIDEBAR: EXPLANATION + CHAT SYSTEM
+    # ======================================================================
+
+    st.sidebar.header("Gemini Chart Explanation")
+
+    # ----------------- If explanation exists -----------------
     if st.session_state.get("gemini_chart_explanation"):
+
         meta = st.session_state.get("gemini_chart_meta", {})
         st.sidebar.markdown(f"**Chart:** {meta.get('chart', 'N/A')}")
         st.sidebar.markdown(f"**Generated at:** {meta.get('time', '')}")
         st.sidebar.markdown("---")
+
         st.sidebar.markdown(st.session_state["gemini_chart_explanation"])
+
+        # -----------------------------------------------------
+        # Chat Below the Explanation (A + 1)
+        # -----------------------------------------------------
+        st.sidebar.markdown("### 💬 Follow-up Questions")
+
+        # Show existing chat history
+        for role, msg in st.session_state["chart_chat_history"]:
+            if role == "user":
+                st.sidebar.markdown(f"**You:** {msg}")
+            else:
+                st.sidebar.markdown(f"**Gemini:** {msg}")
+
+        # Chat input
+        user_msg = st.sidebar.text_input("Ask something about this chart:", key="chart_chat_input")
+
+        if user_msg:
+            st.session_state["chart_chat_history"].append(("user", user_msg))
+
+            ctx = st.session_state.get("active_chart_context", {})
+
+            prompt = f"""
+You are MarketAnalystAgent (Gemini). The user is asking a follow-up question about a chart.
+
+Chart Title: {ctx.get("title")}
+Symbols: {ctx.get("symbols")}
+Benchmark: {ctx.get("benchmark")}
+Generated At: {ctx.get("timestamp")}
+
+Chart Notes:
+{ctx.get("notes")}
+
+Numeric Summary:
+{ctx.get("numeric")}
+
+User Question:
+{user_msg}
+
+Instructions:
+- Answer using the chart context above.
+- Stay benchmark-relative where possible.
+- Use markdown formatting.
+"""
+
+            response = AGENTS["MarketAnalystAgent"].run(prompt)
+            answer = response.content
+
+            st.session_state["chart_chat_history"].append(("assistant", answer))
+            st.sidebar.experimental_rerun()
+
+        # Clear button
         if st.sidebar.button("Clear explanation"):
             st.session_state["gemini_chart_explanation"] = None
             st.session_state["gemini_chart_meta"] = None
+            st.session_state["active_chart_context"] = None
+            st.session_state["chart_chat_history"] = []
+
 
 
 # --- Portfolio Strategist Tab ---
