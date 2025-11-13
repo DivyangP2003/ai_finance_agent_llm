@@ -1904,33 +1904,65 @@ with tabs[5]:
             st.markdown("### Allocation Recommendation (XAI)")
             st.markdown(strategy_text)
 
-# --- Chat Assistant Tab ---
 with tabs[6]:
-    st.header("Natural Language Research Assistant")
-    st.markdown("Ask the system — it will route to an appropriate agent and return text + visuals when applicable.")
-    user_query = st.text_input("Enter your question (e.g., 'Show me volatility trends for the S&P 500 in the last year')", "")
-    if st.button("Ask") and user_query.strip():
-        with st.spinner("Interpreting query and running agents..."):
-            close_df_chat = download_close_prices(symbols, period="1y")
-            text_out, meta = interpret_user_query(user_query, symbols, close_df_chat)
-            st.subheader("Assistant Response")
-            st.markdown(text_out)
-            if isinstance(meta, dict):
-                if meta.get("type") == "rolling_vol" and "data" in meta:
-                    vol_df = meta["data"]
-                    st.subheader("Rolling Volatility Visual")
-                    fig_rv = go.Figure()
-                    for c in vol_df.columns:
-                        fig_rv.add_trace(go.Scatter(x=vol_df.index, y=vol_df[c], mode="lines", name=c))
-                    fig_rv.update_layout(template="plotly_white")
-                    st.plotly_chart(fig_rv, use_container_width=True, key=f"chat_vol_{'_'.join(symbols)}")  # ✅ FIXED
-                elif meta.get("type") == "sharpe":
-                    st.metric("Estimated portfolio Sharpe (annualized)", f"{meta['value']:.3f}")
-                elif meta.get("type") == "sentiments":
-                    st.subheader("Sentiment Agent Outputs")
-                    for s, text in meta["data"].items():
-                        with st.expander(s):
-                            st.markdown(text)
+    st.header("💬 Conversational Chat Assistant")
+
+    # initialize chat history
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+
+    def render_chat():
+        for role, msg in st.session_state["chat_history"]:
+            color = "#DCF8C6" if role == "user" else "#F1F0F0"
+            label = "You" if role == "user" else "AI"
+            st.markdown(
+                f"""
+                <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
+                    <b>{label}:</b><br>{msg}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    def build_contextual_prompt(user_query):
+        history = "\n".join(
+            [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
+        )
+        return f"""
+You are a conversational financial assistant connected to a multi-agent research system.
+
+User tickers: {symbols}
+Country: {selected_country}
+Benchmark: {benchmark}
+
+Recent conversation:
+{history}
+
+User query: {user_query}
+
+If the question requires deeper analysis, call the correct agent and summarize results conversationally.
+"""
+
+    render_chat()
+
+    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
+
+    if st.button("Send") and user_input:
+        # add user msg
+        st.session_state["chat_history"].append(("user", user_input))
+
+        # build prompt
+        prompt = build_contextual_prompt(user_input)
+
+        # AI conversation
+        ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
+
+        # add to history
+        st.session_state["chat_history"].append(("assistant", ai_reply))
+
+        # rerender
+        st.experimental_rerun()
+
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
