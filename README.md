@@ -23,7 +23,9 @@
 
 ## [Visit the Website](https://aifinanceagentllm.streamlit.app/)
 
+
 </div>
+
 
 **AI Market Intelligence** is an advanced, multi-agent financial analytics platform powered by **Google Gemini 2.0**.  
 It enables **researchers**, **traders**, **asset managers**, and **risk professionals** to:
@@ -40,6 +42,7 @@ The platform integrates **real market data**, **multi-agent reasoning**, **quant
 ## 📌 Table of Contents
 
 - [Overview](#-overview)
+- [Screenshots](#-screenshots)
 - [Key Features](#key-features)
 - [Multi-Agent Architecture](#multi-agent-architecture)
 - [System Capabilities](#system-capabilities)
@@ -66,6 +69,66 @@ The platform integrates **real market data**, **multi-agent reasoning**, **quant
 - 🤝 Interactive AI insights  
 
 It is designed to help professionals make **faster, smarter, and data-driven decisions** in financial markets.
+
+---
+
+## Screenshots
+
+### 📈 Overview
+![Overview](images/Overview.png)
+
+---
+
+### 🧭 User Guide
+![User Guide](images/UserGuide.png)
+
+---
+
+### 🏢 Company Deep Dives
+![Company Deep Dives](images/CDD.png)
+
+---
+
+### 📉 Risk & Correlation (Masonry Collage)
+
+<p align="center">
+  <img src="images/R&C1.png" width="32%" />
+  <img src="images/R&C2.png" width="32%" />
+  <img src="images/R&C3.png" width="32%" />
+</p>
+<p align="center">
+  <img src="images/R&C4.png" width="48%" />
+  <img src="images/R&C5.png" width="48%" />
+</p>
+
+---
+
+### 🤖 AI Dashboard
+<p align="center">
+  <img src="images/AID1.png" width="48%" />
+  <img src="images/AID2.png" width="48%" />
+</p>
+<p align="center">
+  <img src="images/AID3.png" width="48%" />
+  <img src="images/AID4.png" width="48%" />
+</p>
+
+---
+
+### 📊 Portfolio Strategist  
+![Portfolio Strategist ](images/PS.png)
+
+
+---
+
+### 💬 Chat Assistant
+![Chat Assistant](images/Chat.png)
+![Chart Explain](images/ChartExplain.png)
+
+---
+
+### 📘 Audit & Exports  
+![Audit & Exports](images/AT.png)
 
 ---
 
