@@ -1918,30 +1918,31 @@ with tabs[6]:
     TEXT_COLOR = "white"
 
     def render_message(role, markdown_text):
-        bg = USER_COLOR if role == "user" else AI_COLOR
-        label = "You" if role == "user" else "AI"
+        is_user = role == "user"
+    
+        bg = USER_COLOR if is_user else AI_COLOR
+        align = "flex-end" if is_user else "flex-start"
+        bubble_align = "right" if is_user else "left"
+        text_align = "right" if is_user else "left"
     
         st.markdown(
             f"""
             <div style="
-                background:{bg};
-                padding:14px 18px;
-                margin:12px 0;
-                border-radius:14px;
-                color:{TEXT_COLOR};
-                font-family: 'Inter', sans-serif;
+                display: flex;
+                justify-content: {align};
+                margin: 8px 0;
             ">
-                <div style="font-weight:600; margin-bottom:10px; opacity:0.9;">
-                    {label}
+                <div style="
+                    background: {bg};
+                    padding: 12px 16px;
+                    border-radius: 14px;
+                    max-width: 75%;
+                    color: {TEXT_COLOR};
+                    font-family: 'Inter', sans-serif;
+                    text-align: {text_align};
+                ">
+                    {markdown_text}
                 </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    
-        st.markdown(markdown_text)
-    
-        st.markdown(
-            """
             </div>
             """,
             unsafe_allow_html=True
