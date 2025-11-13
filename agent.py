@@ -14,6 +14,7 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 from fpdf import FPDF
 import statsmodels.api as sm
+import markdown as md
 from typing import Dict, Tuple
 
 
@@ -1904,8 +1905,6 @@ with tabs[5]:
             st.markdown("### Allocation Recommendation (XAI)")
             st.markdown(strategy_text)
 
-import streamlit as st
-import markdown as md
 
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
