@@ -1915,13 +1915,11 @@ with tabs[6]:
 
     def render_chat():
         for role, msg in st.session_state["chat_history"]:
-            color = "#242017" if role == "user" else "#0f0f0f"
+            color = "#DCF8C6" if role == "user" else "#F1F0F0"
             label = "You" if role == "user" else "AI"
-
             st.markdown(
                 f"""
-                <div style='padding:10px; margin:8px 0; background:{color}; 
-                border-radius:10px;'>
+                <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
                     <b>{label}:</b><br>{msg}
                 </div>
                 """,
@@ -1933,28 +1931,26 @@ with tabs[6]:
             [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
         )
         return f"""
-        You are a conversational financial assistant connected to a multi-agent
-        research system.
+You are a conversational financial assistant connected to a multi-agent research system.
 
-        User tickers: {symbols}
-        Country: {selected_country}
-        Benchmark: {benchmark}
+User tickers: {symbols}
+Country: {selected_country}
+Benchmark: {benchmark}
 
-        Recent conversation:
-        {history}
+Recent conversation:
+{history}
 
-        User query: {user_query}
+User query: {user_query}
 
-        If the question requires deeper analysis, call the correct agent and 
-        summarize results conversationally.
-        """
+If the question requires deeper analysis, call the correct agent and summarize results conversationally.
+"""
 
     render_chat()
 
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
     if st.button("Send") and user_input:
-        # add user message
+        # add user msg
         st.session_state["chat_history"].append(("user", user_input))
 
         # build prompt
@@ -1963,10 +1959,10 @@ with tabs[6]:
         # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # add assistant reply to history
+        # add to history
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
-        # re-render
+        # rerender
         st.rerun()
 
 # --- Audit & Exports Tab ---
