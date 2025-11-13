@@ -22,7 +22,7 @@ from markdown import markdown
 # --------------------------- Setup --------------------------- #
 load_dotenv()
 api_key_env = os.getenv("GOOGLE_API_KEY", "")
-
+current_date = datetime.now().strftime("%Y-%m-%d")
 st.set_page_config(page_title="AI Market Intelligence (Multi-Agent)", page_icon="📊", layout="wide")
 
 # --------------------------- Country and Benchmark Mapping --------------------------- #
@@ -2000,7 +2000,7 @@ Guidelines:
 - Use markdown formatting fully (bold, tables, lists, etc.).
 - Do not output code, pseudo-code, scripts, or anything inside code blocks unless the user explicitly asks for code.
 - Do not create Python print statements or programmatically formatted reports.
-- Whenever mentioning a date in a report or summary, always use today's date.
+- Whenever mentioning a date in a report or summary, always use today's date exactly as provided: {current_date}.
 - Do not fabricate numerical values. Use qualitative reasoning when exact data is not available.
 - Provide plain-language financial insights, summaries, and analysis.
 - If deeper analysis is needed, call the correct agent and summarize the results smoothly.
