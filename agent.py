@@ -1187,10 +1187,19 @@ with tabs[0]:
     Each agent focuses on one domain — quantitative metrics, company fundamentals, sentiment, or risk — and the **TeamLeadAgent** combines them into a single benchmark-aware investment report.
 
     **Here’s what happens when you run the full orchestration:**
-    - Data is downloaded from Yahoo Finance (prices, returns, volatility)
-    - News headlines are analyzed for tone and bias
-    - AI agents run independent analyses (Market, Risk, Sentiment, etc.)
-    - The TeamLeadAgent synthesizes all insights into a professional report
+    - Historical price data is fetched from **Yahoo Finance**
+    - Country-specific **exchange suffixes** are automatically added to your tickers  
+    - Market-appropriate **benchmarks** (e.g., S&P 500, Nifty 50, Nikkei 225) are applied  
+    - Region-aware **RSS news feeds** are analyzed for sentiment  
+    - Quantitative metrics are computed (volatility, beta, drawdowns, alpha, CVaR, tracking error, etc.)  
+    - AI agents independently perform:
+      - Market analysis  
+      - Company fundamentals  
+      - Sentiment evaluation  
+      - Risk assessment  
+      - Portfolio construction  
+    - The **TeamLeadAgent** synthesizes all results into a professional, benchmark-aware institutional report
+
     """)
 
     st.subheader("👥 Agents and Their Roles")
@@ -1209,11 +1218,23 @@ with tabs[0]:
 
     st.header("⚙️ How to Use the App")
     st.markdown("""
-    1. **Enter stock symbols** in the sidebar — e.g.:
+    1. **Select a Country/Region**  
+       This automatically loads:  
+       - the correct benchmark choices,  
+       - the correct exchange suffix,  
+       - region/language for news.  
+       Example:  
+       - India → suffix `.NS`  
+       - Japan → `.T`  
+       - Canada → `.TO`  
+       - UK → `.L`
+
+    2. **Enter stock symbols** in the sidebar — e.g.:
        - `AAPL` (Apple)
        - `TSLA` (Tesla)
        - `GOOG` (Alphabet/Google)
        - You can enter multiple tickers separated by commas.
+       -The system will automatically normalize tickers depending on the chosen country.
     2. **Select a benchmark** — a market index to compare performance against:
        - Default: `^GSPC` → S&P 500 (broad U.S. market)
        - Others: `^DJI` (Dow Jones), `^NDX` (Nasdaq 100), `^IXIC` (Nasdaq Composite)
@@ -1221,6 +1242,7 @@ with tabs[0]:
        - **Overview:** Historical prices & MarketAnalystAgent.
        - **Company Deep Dives:** Company research & sentiment.
        - **Risk & Correlation:** Risk metrics, drawdown, volatility heatmaps.
+       - **AI Dashboard:** Interactive “Ask Gemini About This Chart” explanations 
        - **Portfolio Strategist:** Allocation recommendations.
        - **Chat Assistant:** Ask natural language queries.
        - **Audit & Exports:** Generate benchmark-aware reports.
@@ -1228,7 +1250,7 @@ with tabs[0]:
 
     st.markdown("---")
 
-    st.header("💬 Key Financial Terminologies (Plain English Guide)")
+    st.header("💬 Key Financial Terminologies")
     st.markdown("""
     ### 🔢 Stock Market Basics
     - **Stock / Equity:** Ownership share in a company.
@@ -1246,6 +1268,8 @@ with tabs[0]:
     - **Alpha (α):** Return in excess of the benchmark.
     - **Sharpe Ratio:** Risk-adjusted performance = (Return - Risk-free rate) / Volatility.
     - **VaR (Value at Risk):** Worst expected loss (e.g., “5% VaR = can lose 3% or more 5% of the time”).
+    - **CVaR / Expected Shortfall** — Average loss in worst-case scenarios.  
+    - **Tracking Error** — How much a portfolio deviates from its benchmark.
     - **Max Drawdown:** Largest observed drop in value — a stress test of performance.
 
     ### 💰 Company & Fundamental Terms
@@ -1302,28 +1326,14 @@ with tabs[0]:
     | **Market & Benchmark Overview** | Context on how markets and your stocks performed vs benchmark. |
     | **Company Deep Dives** | Company fundamentals and financial analysis. |
     | **Sentiment Insights** | News tone and behavioral signals. |
-    | **Risk Assessment** | VaR, drawdown, volatility, and correlation results. |
+    | **Risk Assessment** | Sortino Ratio, VaR, drawdown, volatility, Stress test, and correlation results. |
+    | **AI Dashboard** | AI Explanatory Visuals: Efficient Frontier (Mean-Variance Preview), Monte Carlo Forecasting,Cumulative Returns vs Benchmark, Rolling beta, Portfolio Allocation Comparison (Equal • Risk-Parity • Momentum) |
     | **Portfolio Strategy** | AI’s allocation recommendation with rationale. |
     | **Recommendations** | Actionable buy/hold/sell or weighting guidance. |
     | **Audit Trail** | Lists which AI agent produced which section. |
 
     Each **Rationale** section explains *why* the recommendation was made.  
     Each **Recommendation** tells you *what* to do (e.g., overweight, hold, reduce exposure).
-    """)
-
-    st.markdown("---")
-
-    st.header("🔍 Examples of Benchmarks You Can Use")
-    st.markdown("""
-    - `^GSPC` — S&P 500 (broad U.S. market)  
-    - `^DJI` — Dow Jones Industrial Average  
-    - `^NDX` — Nasdaq 100 (tech-heavy)  
-    - `^IXIC` — Nasdaq Composite  
-    - `^RUT` — Russell 2000 (small caps)  
-    - `^FTSE` — UK FTSE 100  
-    - `^N225` — Nikkei 225 (Japan)  
-    - `^HSI` — Hang Seng Index (Hong Kong)  
-    - `^STOXX50E` — Euro Stoxx 50 (Europe)
     """)
 
     st.markdown("---")
