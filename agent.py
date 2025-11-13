@@ -1854,7 +1854,8 @@ with tabs[4]:
             x=np.arange(days),
             y=sim_paths[:,i],
             mode="lines",
-            line=dict(width=1, opacity=0.2),
+            opacity=0.2,
+            line=dict(width=1),
             showlegend=False
         ))
     
