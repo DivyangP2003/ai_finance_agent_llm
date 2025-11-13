@@ -136,6 +136,8 @@ A conversational interface to ask about:
 
 ## Multi-Agent Architecture
 
+![Multi-Agent Architecture Diagram](https://raw.githubusercontent.com/username/repo/main/images/architecture.png)
+
 The system follows a **multi-agent orchestration pipeline** where each specialized AI agent contributes domain-specific intelligence to the final report.
 
 Each Agent Receives
