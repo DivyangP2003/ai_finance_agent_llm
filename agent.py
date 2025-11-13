@@ -1907,77 +1907,50 @@ with tabs[5]:
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
 
-    # Initialize chat history
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # ---------------------------------------------------------
-    # ChatGPT-Style Safe Bubble Renderer (NO BROKEN HTML EVER)
-    # ---------------------------------------------------------
+    # ----------------------
+    # Beautiful ChatGPT-style Renderer
+    # ----------------------
     def render_message(role, markdown_text):
 
-        # Align bubbles
-        align = "flex-end" if role == "user" else "flex-start"
+        justify = "flex-start" if role == "assistant" else "flex-end"
+        bg_color = "#1E1E1E" if role == "assistant" else "#2A2A2A"
+        text_color = "white"
+        label = "AI" if role == "assistant" else "You"
 
-        # Bubble colors
-        bubble_color = "#2A2A2A" if role == "user" else "#1E1E1E"
-        label = "You" if role == "user" else "AI"
-
-        # -------------------------------
-        # Bubble Header (Name label)
-        # -------------------------------
+        # Bubble wrapper
         st.markdown(
             f"""
             <div style="
                 display:flex;
-                justify-content:{align};
-                margin-top: 12px;
+                justify-content:{justify};
+                margin: 12px 0;
             ">
                 <div style="
+                    background:{bg_color};
+                    color:{text_color};
                     max-width:70%;
-                    background:{bubble_color};
-                    padding:14px 18px 6px 18px;
-                    border-radius:18px 18px 6px 6px;
-                    color:white;
+                    padding:14px 18px;
+                    border-radius:18px;
                     font-size:16px;
-                    line-height:1.5;
-                    box-shadow:0px 0px 4px rgba(0,0,0,0.35);
+                    line-height:1.6;
+                    box-shadow:0 0 6px rgba(0,0,0,0.4);
+                    white-space:pre-wrap;
+                    overflow-wrap:break-word;
                 ">
-                    <div style="opacity:0.6; font-size:13px; margin-bottom:4px;">
+                    <div style="opacity:0.65; font-size:13px; margin-bottom:8px;">
                         <b>{label}</b>
                     </div>
-            """,
+        """,
             unsafe_allow_html=True
         )
 
-        # -------------------------------
-        # Markdown content wrapper (SAFE)
-        # The markdown is NOT placed inside the above HTML bubble.
-        # It's placed in a separate Streamlit-rendered block.
-        # -------------------------------
-        st.markdown(
-            f"""
-            <div style="
-                display:flex;
-                justify-content:{align};
-            ">
-                <div style="
-                    max-width:70%;
-                    background:{bubble_color};
-                    padding:4px 18px 14px 18px;
-                    border-radius:0 0 18px 18px;
-                    color:white;
-                    font-size:16px;
-                    line-height:1.5;
-                ">
-            """,
-            unsafe_allow_html=True
-        )
-
-        # Render text safely as markdown
+        # Markdown content INSIDE bubble
         st.markdown(markdown_text)
 
-        # Close wrapper safely
+        # Closing HTML tags
         st.markdown(
             """
                 </div>
@@ -1986,9 +1959,9 @@ with tabs[6]:
             unsafe_allow_html=True
         )
 
-    # ---------------------------------------------------------
-    # Build Contextual Prompt to Feed TeamLeadAgent
-    # ---------------------------------------------------------
+    # ----------------------
+    # Build prompt
+    # ----------------------
     def build_contextual_prompt(user_query):
         history = "\n".join(
             [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
@@ -2004,44 +1977,29 @@ Recent conversation:
 {history}
 
 User query: {user_query}
-
-If the question requires deeper analysis, call the correct agent (market, sentiment, risk, portfolio) and summarize results conversationally.
 """
 
-    # ---------------------------------------------------------
-    # Render Chat History
-    # ---------------------------------------------------------
+    # ----------------------
+    # Render chat history
+    # ----------------------
     for role, msg in st.session_state["chat_history"]:
         render_message(role, msg)
 
-    # ---------------------------------------------------------
-    # User Input
-    # ---------------------------------------------------------
-    user_input = st.text_input(
-        "Ask anything about markets, stocks or portfolio:",
-        key="chat_input"
-    )
+    # ----------------------
+    # Input bar
+    # ----------------------
+    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
-    # ---------------------------------------------------------
-    # On Send
-    # ---------------------------------------------------------
     if st.button("Send") and user_input.strip():
 
-        # Add user message to history
         st.session_state["chat_history"].append(("user", user_input))
 
-        # Build AI prompt with history context
         prompt = build_contextual_prompt(user_input)
-
-        # Ask your TeamLeadAgent
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # Add assistant reply
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
-        # Rerender UI
         st.rerun()
-
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
