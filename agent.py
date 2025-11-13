@@ -3050,23 +3050,27 @@ with tabs[3]:
 
 # --- AI Dashboard Tab (REPLACE YOUR EXISTING AI DASHBOARD BLOCK WITH THIS) ---
 with tabs[4]:
-    
     st.header("📈 AI Market Intelligence Dashboard — Interactive (Ask Gemini)")
 
+    # --- Load data as before ---
     close_df_dash = download_close_prices(symbols, period="1y")
     bench_prices_dash = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
     returns_dash = compute_returns(close_df_dash) if not close_df_dash.empty else pd.DataFrame()
 
-    # Utility: cache Gemini explanations to avoid repeated model calls for same prompt
-    @st.cache_data(ttl=60 * 60)  # cache for 1 hour
+    # --- Utility: cache Gemini explanations to avoid repeated model calls for same prompt ---
+    @st.cache_data(ttl=60 * 60)
     def get_gemini_explanation(prompt: str, agent_name: str = "MarketAnalystAgent") -> str:
+        """
+        Wrap AGENTS[agent_name].run(prompt). Return .content or error message.
+        """
         try:
             resp = AGENTS[agent_name].run(prompt)
-            return resp.content
+            # if agent returns an object, adapt to .content; otherwise stringify
+            return getattr(resp, "content", str(resp))
         except Exception as e:
             return f"⚠️ Gemini call failed: {e}"
 
-    # Small helper to create the Ask-Gemini prompt
+    # --- Helper to create Ask-Gemini prompt (unchanged) ---
     def build_chart_prompt(title: str, chart_notes: str, numeric_summary: dict, symbols_list: list):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
         summary_lines = "\n".join([f"- {k}: {v}" for k, v in numeric_summary.items()])
@@ -3092,20 +3096,32 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
 """
         return prompt
 
-    # Sidebar area where Gemini answers will be displayed
-    st.sidebar.header("Gemini Chart Explanation")
-    if "gemini_chart_explanation" not in st.session_state:
-        st.session_state["gemini_chart_explanation"] = None
-        st.session_state["gemini_chart_meta"] = None
+    # --- Initialize session_state fields for chat if missing ---
+    if "gemini_chat_history" not in st.session_state:
+        st.session_state["gemini_chat_history"] = []  # list of {"role":"assistant"|"user", "content": str}
+    if "gemini_chat_agent" not in st.session_state:
+        st.session_state["gemini_chat_agent"] = "MarketAnalystAgent"
+    if "gemini_chat_meta" not in st.session_state:
+        st.session_state["gemini_chat_meta"] = {}
 
+    # Helper to start/seed a new chat when a chart button is clicked
+    def seed_gemini_chat(initial_text: str, agent_name: str, meta: dict):
+        """
+        Replace current chat with initial assistant message and set agent + meta.
+        """
+        st.session_state["gemini_chat_history"] = [
+            {"role": "assistant", "content": initial_text}
+        ]
+        st.session_state["gemini_chat_agent"] = agent_name
+        st.session_state["gemini_chat_meta"] = meta
+
+    # ---------------------- Main Layout Charts ----------------------
     if not close_df_dash.empty:
-        # Layout: two columns for top charts
         col1, col2 = st.columns([2, 1])
 
         # ---------------------- Cumulative Returns vs Benchmark ----------------------
         with col1:
             st.subheader("Cumulative Returns vs Benchmark (1Y)")
-
             cum = (1 + returns_dash).cumprod()
             fig_cum = go.Figure()
             for c in cum.columns:
@@ -3115,13 +3131,11 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                 bench_cum = (1 + bench_ret).cumprod()
                 fig_cum.add_trace(go.Scatter(x=bench_cum.index, y=bench_cum.values, mode="lines",
                                              name=f"{benchmark}", line=dict(width=3, dash="dash")))
-
             fig_cum.update_layout(template="plotly_white", yaxis_title="Growth (1 = 0%)")
             st.plotly_chart(fig_cum, use_container_width=True)
 
             # Gemini button
             if st.button("Ask Gemini about this chart — Cumulative Returns", key="ask_cum"):
-                # prepare short numeric summary
                 numeric = {}
                 for c in cum.columns:
                     numeric[f"{c} (1Y)"] = f"{(cum[c].iloc[-1] - 1):.2%}"
@@ -3133,8 +3147,10 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                     numeric,
                     symbols
                 )
-                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-                st.session_state["gemini_chart_meta"] = {"chart": "Cumulative Returns", "time": datetime.now().isoformat()}
+                explanation = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+                meta = {"chart": "Cumulative Returns", "time": datetime.now().isoformat(), "symbols": symbols}
+                seed_gemini_chat(explanation, agent_name="MarketAnalystAgent", meta=meta)
+                st.experimental_rerun()
 
         # ---------------------- Alpha vs Beta Scatter ----------------------
         with col2:
@@ -3174,8 +3190,10 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                     numeric,
                     symbols
                 )
-                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-                st.session_state["gemini_chart_meta"] = {"chart": "Alpha vs Beta", "time": datetime.now().isoformat()}
+                explanation = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+                meta = {"chart": "Alpha vs Beta", "time": datetime.now().isoformat(), "symbols": symbols}
+                seed_gemini_chat(explanation, agent_name="MarketAnalystAgent", meta=meta)
+                st.experimental_rerun()
 
         # ---------------------- Rolling Correlation vs Benchmark ----------------------
         st.subheader("Rolling 63-Day Correlation vs Benchmark")
@@ -3191,11 +3209,10 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
             st.info("Benchmark data required for rolling correlation.")
 
         if st.button("Ask Gemini about this chart — Rolling Correlation", key="ask_corr"):
-            # build numeric summary: last corr + mean corr for each symbol
             numeric = {}
             if not bench_prices_dash.empty:
                 for c in returns_dash.columns:
-                    roll = returns_dash[c].rolling(63).corr(compute_returns(bench_prices_dash).iloc[:,0])
+                    roll = returns_dash[c].rolling(63).corr(compute_returns(bench_prices_dash).iloc[:, 0])
                     numeric[f"{c} last"] = f"{roll.iloc[-1]:.2f}" if not roll.empty else "N/A"
                     numeric[f"{c} mean"] = f"{roll.mean():.2f}" if not roll.empty else "N/A"
             prompt = build_chart_prompt(
@@ -3204,8 +3221,10 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Rolling Correlation", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            meta = {"chart": "Rolling Correlation", "time": datetime.now().isoformat(), "symbols": symbols}
+            seed_gemini_chat(explanation, agent_name="MarketAnalystAgent", meta=meta)
+            st.experimental_rerun()
 
         # ---------------------- Allocation Pie Charts ----------------------
         st.subheader("Portfolio Allocation Comparison (Equal • Risk-Parity • Momentum)")
@@ -3230,17 +3249,19 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
         if st.button("Ask Gemini about this chart — Allocations", key="ask_alloc"):
             numeric = {}
             if returns_dash is not None and not returns_dash.empty:
-                numeric["Equal"] = ", ".join([f"{k}:{v:.2%}" for k,v in equal.items()])
-                numeric["RiskParity"] = ", ".join([f"{k}:{v:.2%}" for k,v in invvol.items()])
-                numeric["Momentum"] = ", ".join([f"{k}:{v:.2%}" for k,v in mom.items()])
+                numeric["Equal"] = ", ".join([f"{k}:{v:.2%}" for k, v in equal.items()])
+                numeric["RiskParity"] = ", ".join([f"{k}:{v:.2%}" for k, v in invvol.items()])
+                numeric["Momentum"] = ", ".join([f"{k}:{v:.2%}" for k, v in mom.items()])
             prompt = build_chart_prompt(
                 "Portfolio Allocation Comparison",
                 "Three pie charts showing Equal-weight, Risk-parity (inverse vol), and Momentum-tilt allocations.",
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Allocations", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
+            meta = {"chart": "Allocations", "time": datetime.now().isoformat(), "symbols": symbols}
+            seed_gemini_chat(explanation, agent_name="PortfolioStrategistAgent", meta=meta)
+            st.experimental_rerun()
 
         # ---------------------- Sector Exposure Treemap ----------------------
         st.subheader("Sector Exposure Treemap")
@@ -3254,15 +3275,17 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
             st.info("Sector metadata not available for selected symbols.")
 
         if st.button("Ask Gemini about this chart — Sector Exposure", key="ask_sector"):
-            numeric = {k: f"{v:.2%}" for k,v in sector_weights.items()}
+            numeric = {k: f"{v:.2%}" for k, v in sector_weights.items()}
             prompt = build_chart_prompt(
                 "Sector Exposure Treemap",
                 "Treemap showing portfolio weight by sector based on yfinance metadata.",
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Sector Exposure", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            meta = {"chart": "Sector Exposure", "time": datetime.now().isoformat(), "symbols": symbols}
+            seed_gemini_chat(explanation, agent_name="MarketAnalystAgent", meta=meta)
+            st.experimental_rerun()
 
         # ---------------------- Stress Test Bar Chart ----------------------
         st.subheader("Stress Test: -10% Benchmark Shock Impact")
@@ -3285,13 +3308,14 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="RiskAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Stress Test", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="RiskAnalystAgent")
+            meta = {"chart": "Stress Test", "time": datetime.now().isoformat(), "symbols": symbols}
+            seed_gemini_chat(explanation, agent_name="RiskAnalystAgent", meta=meta)
+            st.experimental_rerun()
 
         # ---------------------- Efficient Frontier (if small universe) ----------------------
         st.subheader("Efficient Frontier (Mean-Variance Preview)")
         if len(symbols) <= 5 and not returns_dash.empty:
-            # Use your existing simple frontier builder (keeps tractable)
             def portfolio_performance(weights, mean_returns, cov_matrix):
                 ret = np.dot(weights, mean_returns) * 252
                 vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
@@ -3299,7 +3323,6 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
 
             mean_returns = returns_dash.mean()
             cov_matrix = returns_dash.cov()
-            # Sample random portfolios instead of combinatorial enumeration (fast and interactive)
             n_points = 150
             rets = []
             vols = []
@@ -3331,8 +3354,10 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Efficient Frontier", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
+            meta = {"chart": "Efficient Frontier", "time": datetime.now().isoformat(), "symbols": symbols}
+            seed_gemini_chat(explanation, agent_name="PortfolioStrategistAgent", meta=meta)
+            st.experimental_rerun()
 
         # ---------------------- Rolling Sharpe Ratio ----------------------
         st.subheader("Rolling Sharpe Ratio (63-Day)")
@@ -3361,8 +3386,10 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                 numeric,
                 symbols
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Rolling Sharpe", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            meta = {"chart": "Rolling Sharpe", "time": datetime.now().isoformat(), "symbols": symbols}
+            seed_gemini_chat(explanation, agent_name="MarketAnalystAgent", meta=meta)
+            st.experimental_rerun()
 
         # ---------------------- Monte Carlo Simulation ----------------------
         st.subheader("Monte Carlo Simulation (1-Year)")
@@ -3379,7 +3406,7 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
             sim_paths[:, i] = last_price * np.cumprod(1 + daily)
 
         fig_mc = go.Figure()
-        for i in range(min(paths, 100)):  # show at most 100 lines for performance
+        for i in range(min(paths, 100)):
             fig_mc.add_trace(go.Scatter(x=np.arange(days), y=sim_paths[:, i], mode="lines", showlegend=False, line=dict(width=1)))
         fig_mc.update_layout(title=f"Monte Carlo Price Simulation: {symbol_mc}", template="plotly_white")
         st.plotly_chart(fig_mc, use_container_width=True)
@@ -3397,23 +3424,84 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
                 numeric,
                 [symbol_mc]
             )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": f"Monte Carlo ({symbol_mc})", "time": datetime.now().isoformat()}
+            explanation = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
+            meta = {"chart": f"Monte Carlo ({symbol_mc})", "time": datetime.now().isoformat(), "symbols": [symbol_mc]}
+            seed_gemini_chat(explanation, agent_name="MarketAnalystAgent", meta=meta)
+            st.experimental_rerun()
 
     else:
         st.info("No data available for visualization in the dashboard. Provide symbols and a benchmark to enable charts.")
 
-    # ---------------------- Sidebar: show the Gemini response when available ----------------------
-    if st.session_state.get("gemini_chart_explanation"):
-        meta = st.session_state.get("gemini_chart_meta", {})
-        st.sidebar.markdown(f"**Chart:** {meta.get('chart', 'N/A')}")
-        st.sidebar.markdown(f"**Generated at:** {meta.get('time', '')}")
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(st.session_state["gemini_chart_explanation"])
-        if st.sidebar.button("Clear explanation"):
-            st.session_state["gemini_chart_explanation"] = None
-            st.session_state["gemini_chart_meta"] = None
+    # ---------------------- Sidebar: Gemini Chat (TEXT-ONLY) ----------------------
+    st.sidebar.header("Gemini Chart Conversation (Text Chat)")
 
+    # Display chart metadata if present
+    if st.session_state.get("gemini_chat_meta"):
+        meta = st.session_state["gemini_chat_meta"]
+        st.sidebar.markdown(f"**Chart:** {meta.get('chart','N/A')}")
+        st.sidebar.markdown(f"**Generated at:** {meta.get('time','')}")
+        st.sidebar.markdown("---")
+
+    # Render chat history (text-only, simple)
+    if st.session_state["gemini_chat_history"]:
+        for msg in st.session_state["gemini_chat_history"]:
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            if role == "assistant":
+                st.sidebar.markdown(f"**🤖 Gemini:**\n{content}")
+            else:
+                st.sidebar.markdown(f"**🧑 You:** {content}")
+            st.sidebar.markdown("")  # spacing
+
+    else:
+        st.sidebar.info("Click any 'Ask Gemini about this chart' button to seed a conversation.")
+
+    # User input for follow-ups
+    user_input = st.sidebar.text_input("Ask a follow-up question", key="gemini_chat_input")
+    if st.sidebar.button("Send", key="gemini_chat_send"):
+        if user_input and user_input.strip():
+            # Append user's message
+            st.session_state["gemini_chat_history"].append({"role": "user", "content": user_input.strip()})
+
+            # Build prompt to send to Gemini: include chart meta + full chat history
+            meta_block = ""
+            meta = st.session_state.get("gemini_chat_meta", {})
+            if meta:
+                meta_block = (
+                    f"Chart Context:\n- Chart: {meta.get('chart','N/A')}\n"
+                    f"- Generated at: {meta.get('time','')}\n"
+                    f"- Symbols: {', '.join(meta.get('symbols', [])) if meta.get('symbols') else 'N/A'}\n\n"
+                )
+
+            history_block = ""
+            for h in st.session_state["gemini_chat_history"]:
+                if h["role"] == "user":
+                    history_block += f"User: {h['content']}\n"
+                else:
+                    history_block += f"Assistant: {h['content']}\n"
+
+            full_prompt = meta_block + "Conversation:\n" + history_block + "\nAssistant:"
+
+            # Call Gemini (use current chat agent)
+            agent_name = st.session_state.get("gemini_chat_agent", "MarketAnalystAgent")
+            try:
+                resp = AGENTS[agent_name].run(full_prompt)
+                assistant_reply = getattr(resp, "content", str(resp))
+            except Exception as e:
+                assistant_reply = f"⚠️ Gemini call failed: {e}"
+
+            # Append assistant reply to history and clear input
+            st.session_state["gemini_chat_history"].append({"role": "assistant", "content": assistant_reply})
+            st.session_state["gemini_chat_input"] = ""
+            st.experimental_rerun()
+
+    # Allow clearing the conversation
+    if st.sidebar.button("Clear conversation", key="gemini_chat_clear"):
+        st.session_state["gemini_chat_history"] = []
+        st.session_state["gemini_chat_agent"] = "MarketAnalystAgent"
+        st.session_state["gemini_chat_meta"] = {}
+        st.session_state["gemini_chat_input"] = ""
+        st.experimental_rerun()
 
 # --- Portfolio Strategist Tab ---
 with tabs[5]:
