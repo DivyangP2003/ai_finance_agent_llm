@@ -15,6 +15,7 @@ from agno.models.google import Gemini
 from fpdf import FPDF
 import statsmodels.api as sm
 from typing import Dict, Tuple
+import itertools
 
 
 # --------------------------- Setup --------------------------- #
@@ -1693,6 +1694,177 @@ with tabs[4]:
                 template="plotly_white"
             )
             st.plotly_chart(fig_shock, use_container_width=True)
+
+        # ---------------------- 7. Efficient Frontier ----------------------
+        st.subheader("📌 Efficient Frontier (Mean-Variance Optimization)")
+        def portfolio_performance(weights, mean_returns, cov_matrix):
+            ret = np.dot(weights, mean_returns) * 252
+            vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+            return vol, ret
+        
+        def efficient_frontier(returns, num_points=50):
+            mean_returns = returns.mean()
+            cov_matrix = returns.cov()
+            results = {"vol": [], "ret": [], "weights": []}
+        
+            for target in np.linspace(mean_returns.min(), mean_returns.max(), num_points):
+                best = None
+                best_vol = 1e9
+                for w in itertools.product(np.linspace(0,1,25), repeat=len(mean_returns)):
+                    w = np.array(w)
+                    if abs(w.sum() - 1) > 0.001: 
+                        continue
+                    vol, ret = portfolio_performance(w, mean_returns, cov_matrix)
+                    if abs(ret - target) < 0.001 and vol < best_vol:
+                        best_vol = vol
+                        best = (ret, vol, w)
+                if best:
+                    results["ret"].append(best[0])
+                    results["vol"].append(best[1])
+                    results["weights"].append(best[2])
+        
+            return results
+        
+        if len(symbols) <= 5:  # avoid huge combinatorial explosion
+            frontier = efficient_frontier(returns_dash)
+        
+            fig_ef = go.Figure()
+            fig_ef.add_trace(go.Scatter(
+                x=frontier["vol"], y=frontier["ret"],
+                mode="markers", name="Efficient Frontier"
+            ))
+        
+            # Mark equal-weight
+            eq_w = np.array([1/len(symbols)] * len(symbols))
+            eq_vol, eq_ret = portfolio_performance(eq_w, returns_dash.mean(), returns_dash.cov())
+            fig_ef.add_trace(go.Scatter(
+                x=[eq_vol], y=[eq_ret], mode="markers", name="Equal Weight", marker=dict(size=12, symbol="star")
+            ))
+        
+            fig_ef.update_layout(
+                xaxis_title="Volatility (Annualized)",
+                yaxis_title="Expected Return (Annualized)",
+                template="plotly_white"
+            )
+        
+            st.plotly_chart(fig_ef, use_container_width=True)
+        else:
+            st.info("Efficient frontier preview is limited to ≤ 5 assets for tractability.")
+
+        # ---------------------- 8. Risk Contribution Waterfall ----------------------
+        st.subheader("🔍 Risk Contribution Breakdown (Equal-Weight Portfolio)")
+        
+        cov = returns_dash.cov()
+        weights = np.array([1/len(symbols)] * len(symbols))
+        port_vol = np.sqrt(weights @ cov @ weights)  # σp
+        
+        risk_contrib = weights * (cov @ weights) / port_vol
+        df_rc = pd.DataFrame({
+            "Symbol": symbols,
+            "Contribution (%)": risk_contrib * 100
+        })
+        
+        fig_rc = go.Figure(go.Bar(
+            x=df_rc["Symbol"],
+            y=df_rc["Contribution (%)"],
+            marker=dict(line=dict(width=1))
+        ))
+        fig_rc.update_layout(
+            yaxis_title="Portfolio Risk Contribution (%)",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_rc, use_container_width=True)
+        
+
+    # ---------------------- 9. Rolling Sharpe Ratio ----------------------
+    st.subheader("📈 Rolling Sharpe Ratio (63-Day)")
+    
+    roll_sharpe_fig = go.Figure()
+    window = 63
+    
+    for c in returns_dash.columns:
+        roll_ret = returns_dash[c].rolling(window).mean() * 252
+        roll_vol = returns_dash[c].rolling(window).std() * np.sqrt(252)
+        rs = roll_ret / roll_vol
+    
+        roll_sharpe_fig.add_trace(go.Scatter(
+            x=rs.index, y=rs.values, mode="lines", name=c
+        ))
+    
+    roll_sharpe_fig.update_layout(template="plotly_white", yaxis_title="Sharpe Ratio")
+    st.plotly_chart(roll_sharpe_fig, use_container_width=True)
+
+    # ---------------------- 10. Market Regime Detection ----------------------
+    st.subheader("🧭 Market Regime Detection (Volatility Regimes)")
+    
+    bench_ret_reg = compute_returns(bench_prices_dash).iloc[:,0] if not bench_prices_dash.empty else None
+    
+    if bench_ret_reg is not None:
+        roll_vol = bench_ret_reg.rolling(63).std() * np.sqrt(252)
+        thresholds = roll_vol.quantile([0.33, 0.66])
+        low, high = thresholds[0.33], thresholds[0.66]
+    
+        regime = []
+        for v in roll_vol:
+            if v < low: regime.append("Low Vol (Risk-On)")
+            elif v < high: regime.append("Neutral")
+            else: regime.append("High Vol (Risk-Off)")
+    
+        fig_reg = go.Figure()
+        fig_reg.add_trace(go.Scatter(
+            x=roll_vol.index,
+            y=roll_vol.values,
+            mode="lines",
+            name="Volatility"
+        ))
+    
+        # Color-coded bands
+        fig_reg.add_hrect(y0=0, y1=low, fillcolor="green", opacity=0.15, line_width=0)
+        fig_reg.add_hrect(y0=low, y1=high, fillcolor="yellow", opacity=0.15, line_width=0)
+        fig_reg.add_hrect(y0=high, y1=roll_vol.max(), fillcolor="red", opacity=0.15, line_width=0)
+    
+        fig_reg.update_layout(
+            title="Market Regime via Volatility",
+            yaxis_title="Annualized Volatility",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_reg, use_container_width=True)
+    else:
+        st.info("Benchmark data required for regime detection.")
+
+    # ---------------------- 12. Monte Carlo Simulation ----------------------
+    st.subheader("🎲 Monte Carlo Simulation (1-Year)")
+    
+    symbol_mc = st.selectbox("Select symbol for simulation", symbols)
+    last_price = close_df_dash[symbol_mc].iloc[-1]
+    vol = returns_dash[symbol_mc].std() * np.sqrt(252)
+    mu = returns_dash[symbol_mc].mean() * 252
+    
+    days = 252
+    paths = 300
+    
+    sim_paths = np.zeros((days, paths))
+    for i in range(paths):
+        daily = np.random.normal(mu/days, vol/np.sqrt(days), days)
+        sim_paths[:, i] = last_price * np.cumprod(1 + daily)
+    
+    fig_mc = go.Figure()
+    for i in range(paths):
+        fig_mc.add_trace(go.Scatter(
+            x=np.arange(days),
+            y=sim_paths[:,i],
+            mode="lines",
+            line=dict(width=1, opacity=0.2),
+            showlegend=False
+        ))
+    
+    fig_mc.update_layout(
+        title=f"Monte Carlo Price Simulation: {symbol_mc}",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_mc, use_container_width=True)
+
+
 
 # --- Portfolio Strategist Tab ---
 with tabs[5]:
