@@ -1912,77 +1912,31 @@ with tabs[6]:
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # --- Bubble colors ---
-    USER_COLOR = "#242017"      # Dark brown/grey
-    AI_COLOR = "#0f0f0f"        # Deep black
-    TEXT_COLOR = "white"
-
-    def render_message(role, markdown_text):
-        is_user = role == "user"
-    
-        bg = USER_COLOR if is_user else AI_COLOR
-        align = "flex-end" if is_user else "flex-start"
-        text_align = "right" if is_user else "left"
-    
-        st.markdown(
-            f"""
-            <div style="
-                display: flex;
-                justify-content: {align};
-                margin: 8px 0;
-            ">
-                <div style="
-                    background: {bg};
-                    padding: 12px 16px;
-                    border-radius: 14px;
-                    max-width: 75%;
-                    color: {TEXT_COLOR};
-                    font-family: 'Inter', sans-serif;
-                    text-align: {text_align};
-                ">
-                    {markdown_text}
+    def render_chat():
+        for role, msg in st.session_state["chat_history"]:
+            color = "#DCF8C6" if role == "user" else "#F1F0F0"
+            label = "You" if role == "user" else "AI"
+            st.markdown(
+                f"""
+                <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
+                    <b>{label}:</b><br>{msg}
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                """,
+                unsafe_allow_html=True,
+            )
 
-    # Render all chat messages
-    for role, msg in st.session_state["chat_history"]:
-        render_message(role, msg)
+    render_chat()
 
-    # --- User Input ---
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
-    def build_contextual_prompt(user_query):
-        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
-        return f"""
-You are a conversational financial assistant connected to a multi-agent research system.
-
-User tickers: {symbols}
-Country: {selected_country}
-Benchmark: {benchmark}
-
-Recent conversation:
-{history}
-
-User query: {user_query}
-
-If needed, call internal market, risk, sentiment or portfolio agents and summarize naturally.
-"""
-
-    # --- Send button ---
-    if st.button("Send") and user_input.strip():
+    if st.button("Send") and user_input:
         st.session_state["chat_history"].append(("user", user_input))
 
-        # Run agent
+        # Build contextual query
+        prompt = f"User said: {user_input}. Please respond conversationally."
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # 🔧 FIX: Remove stray HTML like extra </div> that LLM occasionally outputs
-        clean_reply = ai_reply.replace("</div>", "").strip()
-
-        # Save
-        st.session_state["chat_history"].append(("assistant", clean_reply))
+        st.session_state["chat_history"].append(("assistant", ai_reply))
 
         st.rerun()
 
