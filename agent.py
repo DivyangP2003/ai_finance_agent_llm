@@ -1912,73 +1912,61 @@ with tabs[6]:
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # --------------------------
-    # CHATGPT-STYLE MESSAGE WITH AVATARS
-    # --------------------------
+    # --- Bubble colors ---
+    USER_COLOR = "#242017"      # Dark brown/grey
+    AI_COLOR = "#0f0f0f"        # Deep black
+    TEXT_COLOR = "white"
+
     def render_message(role, markdown_text):
-
-        is_user = (role == "user")
-
-        # Avatar symbols
-        avatar = "🧑" if is_user else "🤖"
-
-        # Alignment
-        row_align = "flex-end" if is_user else "flex-start"
-        bubble_align = "row-reverse" if is_user else "row"
-
-        # Colors
-        bubble_color = "#2A2A2A" if is_user else "#1E1E1E"
-
-        # Convert markdown → HTML
-        html_content = md.markdown(markdown_text)
-
-        # Build full HTML bubble (avatar + message)
-        html = f"""
-        <div style="display:flex; justify-content:{row_align}; margin:12px 0;">
-            <div style="display:flex; flex-direction:{bubble_align}; gap:10px; align-items:flex-start; max-width:80%;">
-                
-                <!-- Avatar -->
-                <div style="
-                    width:38px;
-                    height:38px;
-                    background:#3A3A3A;
-                    border-radius:50%;
-                    display:flex;
-                    align-items:center;
-                    justify-content:center;
-                    font-size:20px;
-                    color:white;
-                    flex-shrink:0;
-                ">
-                    {avatar}
-                </div>
-
-                <!-- Bubble -->
-                <div style="
-                    background:{bubble_color};
-                    color:white;
-                    padding:14px 18px;
-                    border-radius:18px;
-                    font-size:16px;
-                    line-height:1.55;
-                    box-shadow:0px 0px 6px rgba(0,0,0,0.35);
-                    white-space:normal;
-                    overflow-wrap:break-word;
-                    width:auto;
-                    max-width:100%;
-                ">
-                    {html_content}
-                </div>
-
-            </div>
-        </div>
         """
+        Render a ChatGPT-style bubble with markdown inside.
+        Safe: HTML wrapper + Streamlit markdown rendering.
+        """
+        bg = USER_COLOR if role == "user" else AI_COLOR
+        label = "You" if role == "user" else "AI"
 
-        st.markdown(html, unsafe_allow_html=True)
+        # Outer bubble container
+        st.markdown(
+            f"""
+            <div style="
+                background:{bg};
+                padding:14px 18px;
+                margin:10px 0;
+                border-radius:12px;
+                color:{TEXT_COLOR};
+            ">
+            <b>{label}:</b>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    # --------------------------
-    # Build prompt for the agent
-    # --------------------------
+        # Now render markdown **under** the bubble header
+        container = st.container()
+        with container:
+            st.markdown(
+                f"""
+                <div style="
+                    background:{bg};
+                    padding:6px 18px 14px 18px;
+                    margin-top:-18px;
+                    margin-bottom:6px;
+                    border-radius:0 0 12px 12px;
+                    color:{TEXT_COLOR};
+                ">
+                """,
+                unsafe_allow_html=True
+            )
+            st.markdown(markdown_text)  # <-- Markdown enabled safely
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # Render all chat messages
+    for role, msg in st.session_state["chat_history"]:
+        render_message(role, msg)
+
+    # --- User Input ---
+    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
+
     def build_contextual_prompt(user_query):
         history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
         return f"""
@@ -1988,36 +1976,24 @@ User tickers: {symbols}
 Country: {selected_country}
 Benchmark: {benchmark}
 
-Conversation so far:
+Recent conversation:
 {history}
 
 User query: {user_query}
+
+If needed, call internal market, risk, sentiment or portfolio agents and summarize naturally.
 """
 
-    # --------------------------
-    # Render previous chat
-    # --------------------------
-    for role, msg in st.session_state["chat_history"]:
-        render_message(role, msg)
-
-    # --------------------------
-    # User Input
-    # --------------------------
-    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
-
+    # --- Send button ---
     if st.button("Send") and user_input.strip():
-
-        # Save user msg
         st.session_state["chat_history"].append(("user", user_input))
 
         prompt = build_contextual_prompt(user_input)
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # Save assistant reply
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
         st.rerun()
-
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
