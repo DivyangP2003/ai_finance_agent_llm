@@ -1922,7 +1922,6 @@ with tabs[6]:
     
         bg = USER_COLOR if is_user else AI_COLOR
         align = "flex-end" if is_user else "flex-start"
-        bubble_align = "right" if is_user else "left"
         text_align = "right" if is_user else "left"
     
         st.markdown(
@@ -1947,7 +1946,6 @@ with tabs[6]:
             """,
             unsafe_allow_html=True
         )
-
 
     # Render all chat messages
     for role, msg in st.session_state["chat_history"]:
@@ -1977,13 +1975,16 @@ If needed, call internal market, risk, sentiment or portfolio agents and summari
     if st.button("Send") and user_input.strip():
         st.session_state["chat_history"].append(("user", user_input))
 
-        prompt = build_contextual_prompt(user_input)
+        # Run agent
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        st.session_state["chat_history"].append(("assistant", ai_reply))
+        # 🔧 FIX: Remove stray HTML like extra </div> that LLM occasionally outputs
+        clean_reply = ai_reply.replace("</div>", "").strip()
+
+        # Save
+        st.session_state["chat_history"].append(("assistant", clean_reply))
 
         st.rerun()
-
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
