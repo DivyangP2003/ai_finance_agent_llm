@@ -1907,32 +1907,66 @@ with tabs[5]:
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
 
-    import html
-
-    def safe_text(text: str):
-        return html.escape(text).replace("\n", "<br>")
-
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    def render_chat():
-        for role, msg in st.session_state["chat_history"]:
-            safe_msg = safe_text(msg)
-            color = "#242017" if role == "user" else "#0f0f0f"
-            label = "You" if role == "user" else "AI"
+    # --- Bubble colors ---
+    USER_COLOR = "#242017"      # Dark brown/grey
+    AI_COLOR = "#0f0f0f"        # Deep black
+    TEXT_COLOR = "white"
+
+    def render_message(role, markdown_text):
+        """
+        Render a ChatGPT-style bubble with markdown inside.
+        Safe: HTML wrapper + Streamlit markdown rendering.
+        """
+        bg = USER_COLOR if role == "user" else AI_COLOR
+        label = "You" if role == "user" else "AI"
+
+        # Outer bubble container
+        st.markdown(
+            f"""
+            <div style="
+                background:{bg};
+                padding:14px 18px;
+                margin:10px 0;
+                border-radius:12px;
+                color:{TEXT_COLOR};
+            ">
+            <b>{label}:</b>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Now render markdown **under** the bubble header
+        container = st.container()
+        with container:
             st.markdown(
                 f"""
-                <div style='padding:12px; margin:8px 0; background:{color}; border-radius:10px; color:white;'>
-                    <b>{label}:</b><br>{safe_msg}
-                </div>
+                <div style="
+                    background:{bg};
+                    padding:6px 18px 14px 18px;
+                    margin-top:-18px;
+                    margin-bottom:6px;
+                    border-radius:0 0 12px 12px;
+                    color:{TEXT_COLOR};
+                ">
                 """,
                 unsafe_allow_html=True
             )
+            st.markdown(markdown_text)  # <-- Markdown enabled safely
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # Render all chat messages
+    for role, msg in st.session_state["chat_history"]:
+        render_message(role, msg)
+
+    # --- User Input ---
+    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
     def build_contextual_prompt(user_query):
-        history = "\n".join(
-            [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
-        )
+        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
         return f"""
 You are a conversational financial assistant connected to a multi-agent research system.
 
@@ -1945,14 +1979,11 @@ Recent conversation:
 
 User query: {user_query}
 
-If the question requires deeper analysis, call the correct agent and summarize results conversationally.
+If needed, call internal market, risk, sentiment or portfolio agents and summarize naturally.
 """
 
-    render_chat()
-
-    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
-
-    if st.button("Send") and user_input:
+    # --- Send button ---
+    if st.button("Send") and user_input.strip():
         st.session_state["chat_history"].append(("user", user_input))
 
         prompt = build_contextual_prompt(user_input)
