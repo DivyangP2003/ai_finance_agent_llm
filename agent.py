@@ -16,7 +16,8 @@ from fpdf import FPDF
 import statsmodels.api as sm
 from typing import Dict, Tuple
 import re
-import html  # <-- required for HTML escaping
+from markdown import markdown
+
 
 # --------------------------- Setup --------------------------- #
 load_dotenv()
@@ -1923,17 +1924,15 @@ with tabs[6]:
         for role, msg in st.session_state["chat_history"]:
             is_user = role == "user"
     
-            # Alignment like ChatGPT
             alignment = "flex-end" if is_user else "flex-start"
     
-            # Bubble styling (blue for AI)
-            bubble_bg = "#3b3bff" if not is_user else "#3b3b3b"
-            border_color = "#6c6cff" if is_user else "#1a1aff"
+            bubble_bg = "#3b3b3b" if is_user else "#1e1e1e"
+            border_color = "#6c6cff" if is_user else "#00c2ff"
             text_color = "white"
     
-            # Clean HTML
             cleaned_msg = re.sub(r"<.*?>", "", msg)
     
+            # Wrap the ENTIRE message (markdown included) INSIDE the HTML bubble
             st.markdown(
                 f"""
                 <div style="
@@ -1943,30 +1942,22 @@ with tabs[6]:
                 ">
                     <div style="
                         background:{bubble_bg};
-                        padding:14px 18px;
+                        padding:16px 20px;
                         border-radius:18px;
                         border:1px solid {border_color};
                         max-width:75%;
-                        box-shadow:0 0 12px rgba(0,0,0,0.25);
                         color:{text_color};
+                        box-shadow:0 0 12px rgba(0,0,0,0.25);
                         font-size:16px;
-                        line-height:1.5;
+                        line-height:1.6;
                     ">
-                """,
-                unsafe_allow_html=True
-            )
-    
-            # Render full markdown INSIDE the bubble
-            st.markdown(cleaned_msg)
-    
-            st.markdown(
-                """
+                        {markdown(cleaned_msg, extensions=['extra'])}
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-    
+
 
     # -------------------------------------------------
     # Contextual Prompt Builder
