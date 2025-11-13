@@ -1986,6 +1986,7 @@ If needed, call internal market, risk, sentiment or portfolio agents and summari
 
         st.rerun()
 
+
 # --- Audit & Exports Tab ---
 with tabs[7]:
     st.header("Audit Trail & Report Generation")
