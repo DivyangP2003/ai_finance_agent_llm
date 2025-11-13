@@ -3393,7 +3393,7 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
 
         # ---------------------- Monte Carlo Simulation ----------------------
         st.subheader("Monte Carlo Simulation (1-Year)")
-        symbol_mc = st.selectbox("Select symbol for simulation", symbols, key="mc_symbol_select")
+        symbol_mc = st.selectbox("Select symbol for simulation", symbols, key="ai_dashboard_mc_select")
         last_price = close_df_dash[symbol_mc].iloc[-1]
         vol_mc = returns_dash[symbol_mc].std() * np.sqrt(252)
         mu_mc = returns_dash[symbol_mc].mean() * 252
