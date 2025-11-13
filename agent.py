@@ -1907,29 +1907,29 @@ with tabs[5]:
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
 
+    # Initialize chat history
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # --- Bubble colors ---
-    USER_COLOR = "#242017"      # Dark brown/grey
-    AI_COLOR = "#0f0f0f"        # Deep black
-    TEXT_COLOR = "white"
-
+    # -----------------------
+    # ChatGPT-Style Message Renderer
+    # -----------------------
     def render_message(role, markdown_text):
-        # Bubble alignment
+
+        # Alignment (AI = left, User = right)
         align = "flex-end" if role == "user" else "flex-start"
-    
+
         # Bubble colors
-        bubble_color = "#1E1E1E" if role == "assistant" else "#2A2A2A"
+        bubble_color = "#2A2A2A" if role == "user" else "#1E1E1E"
         text_color = "white"
         label = "You" if role == "user" else "AI"
-    
+
         st.markdown(
             f"""
             <div style="
                 display:flex;
                 justify-content:{align};
-                margin-bottom:12px;
+                margin: 10px 0;
             ">
                 <div style="
                     max-width:70%;
@@ -1940,8 +1940,9 @@ with tabs[6]:
                     font-size:16px;
                     line-height:1.5;
                     box-shadow:0px 0px 4px rgba(0,0,0,0.35);
+                    word-wrap: break-word;
                 ">
-                    <div style="opacity:0.65; font-size:13px; margin-bottom:4px;">
+                    <div style="opacity:0.6; font-size:13px; margin-bottom:6px;">
                         <b>{label}</b>
                     </div>
                     {markdown_text}
@@ -1951,35 +1952,13 @@ with tabs[6]:
             unsafe_allow_html=True
         )
 
-    
-        # Now render markdown **under** the bubble header
-        container = st.container()
-        with container:
-            st.markdown(
-                f"""
-                <div style="
-                    background:{bg};
-                    padding:6px 18px 14px 18px;
-                    margin-top:-18px;
-                    margin-bottom:6px;
-                    border-radius:0 0 12px 12px;
-                    color:{TEXT_COLOR};
-                ">
-                """,
-                unsafe_allow_html=True
-            )
-            st.markdown(markdown_text)  # <-- Markdown enabled safely
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    # Render all chat messages
-    for role, msg in st.session_state["chat_history"]:
-        render_message(role, msg)
-
-    # --- User Input ---
-    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
-
+    # -----------------------
+    # Build Prompt for TeamLeadAgent
+    # -----------------------
     def build_contextual_prompt(user_query):
-        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
+        history = "\n".join(
+            [f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]]
+        )
         return f"""
 You are a conversational financial assistant connected to a multi-agent research system.
 
@@ -1992,19 +1971,43 @@ Recent conversation:
 
 User query: {user_query}
 
-If needed, call internal market, risk, sentiment or portfolio agents and summarize naturally.
+If the question requires deeper analysis, call the appropriate internal agent and summarize results conversationally.
 """
 
-    # --- Send button ---
+    # -----------------------
+    # Render existing chat history
+    # -----------------------
+    for role, msg in st.session_state["chat_history"]:
+        render_message(role, msg)
+
+    # -----------------------
+    # User input
+    # -----------------------
+    user_input = st.text_input(
+        "Ask anything about markets, stocks or portfolio:",
+        key="chat_input"
+    )
+
+    # -----------------------
+    # Process message
+    # -----------------------
     if st.button("Send") and user_input.strip():
+
+        # Add user message
         st.session_state["chat_history"].append(("user", user_input))
 
+        # Build prompt for AI
         prompt = build_contextual_prompt(user_input)
+
+        # Generate AI reply
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
+        # Add to history
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
+        # Refresh UI
         st.rerun()
+
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
