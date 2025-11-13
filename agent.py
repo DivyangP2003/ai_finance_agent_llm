@@ -2059,20 +2059,41 @@ Guidelines:
 
         loading_ph.markdown(
             """
-            <div style='font-size:18px; color:#999; padding:10px;'>
-                AI is generating<span id='dots'>.</span>
+            <style>
+            .loader-dots {
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
+                padding: 10px;
+            }
+            .loader-dots div {
+                width: 10px;
+                height: 10px;
+                margin: 0 4px;
+                border-radius: 50%;
+                background-color: #4da6ff;
+                animation: bounce 0.6s infinite alternate;
+            }
+            .loader-dots div:nth-child(2) {
+                animation-delay: 0.2s;
+            }
+            .loader-dots div:nth-child(3) {
+                animation-delay: 0.4s;
+            }
+            @keyframes bounce {
+                from { transform: translateY(0); opacity: 0.5; }
+                to { transform: translateY(-8px); opacity: 1; }
+            }
+            </style>
+        
+            <div class="loader-dots">
+                <div></div><div></div><div></div>
             </div>
-
-            <script>
-            var dots = window.setInterval(function() {
-                var d = document.getElementById("dots");
-                if (d.innerHTML.length > 3) d.innerHTML = ".";
-                else d.innerHTML += ".";
-            }, 450);
-            </script>
+            <div style='color:#aaa; font-size:15px; margin-top:-4px;'>AI is thinking...</div>
             """,
             unsafe_allow_html=True
         )
+
 
         # Build contextual prompt
         prompt = build_contextual_prompt(st.session_state["last_sent"])
