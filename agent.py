@@ -1907,50 +1907,30 @@ with tabs[5]:
 
 
 with tabs[6]:
-    import re
-    import streamlit as st
-
     st.header("💬 Conversational Chat Assistant")
 
-    # ---------------------------------------------------
-    # SESSION HISTORY
-    # ---------------------------------------------------
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-
-    # ---------------------------------------------------
-    # COLORS
-    # ---------------------------------------------------
-    USER_COLOR = "#242017"      # User bubble
-    AI_COLOR   = "#0f0f0f"      # AI bubble
+    # --- Bubble colors ---
+    USER_COLOR = "#242017"      # Dark brown/grey
+    AI_COLOR = "#0f0f0f"        # Deep black
     TEXT_COLOR = "white"
 
-
-    # ---------------------------------------------------
-    # CLEAN HTML TAGS FROM AI RAW OUTPUT
-    # ---------------------------------------------------
-    def clean_html(text):
-        return re.sub(r"<[^>]+>", "", text)
-
-
-    # ---------------------------------------------------
-    # RENDER CHAT BUBBLE (Markdown INSIDE the bubble)
-    # ---------------------------------------------------
     def render_message(role, markdown_text):
         is_user = role == "user"
-
+    
         bg = USER_COLOR if is_user else AI_COLOR
         align = "flex-end" if is_user else "flex-start"
+        bubble_align = "right" if is_user else "left"
         text_align = "right" if is_user else "left"
-
-        # Bubble container
+    
         st.markdown(
             f"""
             <div style="
                 display: flex;
                 justify-content: {align};
-                margin: 10px 0;
+                margin: 8px 0;
             ">
                 <div style="
                     background: {bg};
@@ -1961,39 +1941,23 @@ with tabs[6]:
                     font-family: 'Inter', sans-serif;
                     text-align: {text_align};
                 ">
+                    {markdown_text}
+                </div>
+            </div>
             """,
             unsafe_allow_html=True
         )
 
-        # Render markdown INSIDE the bubble
-        st.markdown(markdown_text)
 
-        # Close bubble wrapper
-        st.markdown("</div></div>", unsafe_allow_html=True)
-
-
-    # ---------------------------------------------------
-    # RENDER CHAT HISTORY
-    # ---------------------------------------------------
+    # Render all chat messages
     for role, msg in st.session_state["chat_history"]:
         render_message(role, msg)
 
-
-    # ---------------------------------------------------
-    # USER INPUT BOX
-    # ---------------------------------------------------
+    # --- User Input ---
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
-
-    # ---------------------------------------------------
-    # PROMPT BUILDER
-    # ---------------------------------------------------
     def build_contextual_prompt(user_query):
-        history = "\n".join([
-            f"{r}: {m}"
-            for r, m in st.session_state["chat_history"][-5:]
-        ])
-
+        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
         return f"""
 You are a conversational financial assistant connected to a multi-agent research system.
 
@@ -2009,29 +1973,17 @@ User query: {user_query}
 If needed, call internal market, risk, sentiment or portfolio agents and summarize naturally.
 """
 
-
-    # ---------------------------------------------------
-    # SEND BUTTON HANDLER
-    # ---------------------------------------------------
+    # --- Send button ---
     if st.button("Send") and user_input.strip():
-
-        # Store user message
         st.session_state["chat_history"].append(("user", user_input))
 
-        # Build contextual prompt
         prompt = build_contextual_prompt(user_input)
+        ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # Call your agent
-        ai_raw = AGENTS["TeamLeadAgent"].run(prompt).content
-
-        # Clean broken HTML from the LLM
-        ai_reply = clean_html(ai_raw)
-
-        # Store assistant message
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
-        # Rerun to display
         st.rerun()
+
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
