@@ -1934,7 +1934,8 @@ with tabs[6]:
     # -------------------------------------------------
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
-
+    if "loading" not in st.session_state:
+        st.session_state["loading"] = False
     # -------------------------------------------------
     # Safe Chat Rendering (prevents HTML injection)
     # -------------------------------------------------
@@ -2034,30 +2035,60 @@ Guidelines:
     
     # Detect Enter press (text input changed)
     if user_input and st.session_state.get("last_sent") != user_input:
-    
-        # Update tracker
+
+        # Save last text to avoid double-sending
         st.session_state["last_sent"] = user_input
-    
+
         # Add user message
         st.session_state["chat_history"].append(("user", user_input))
-    
-        # Build prompt
-        prompt = build_contextual_prompt(user_input)
-    
-        # AI conversation
+
+        # Set loading state
+        st.session_state["loading"] = True
+
+        # Rerun immediately to show animation
+        st.rerun()
+
+
+    # -------------------------------------------------
+    # Loading animation (only when AI is generating)
+    # -------------------------------------------------
+    if st.session_state["loading"]:
+        loading_ph = st.empty()
+
+        loading_ph.markdown(
+            """
+            <div style='font-size:18px; color:#999; padding:10px;'>
+                AI is generating<span id='dots'>.</span>
+            </div>
+
+            <script>
+            var dots = window.setInterval(function() {
+                var d = document.getElementById("dots");
+                if (d.innerHTML.length > 3) d.innerHTML = ".";
+                else d.innerHTML += ".";
+            }, 450);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # Build contextual prompt
+        prompt = build_contextual_prompt(st.session_state["last_sent"])
+
+        # Run the AI
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
-    
+
+        # Stop animation
+        loading_ph.empty()
+
         # Add assistant message
         st.session_state["chat_history"].append(("assistant", ai_reply))
-    
-        # Set flag to clear box on next rerun
+
+        # Clear input for next run
         st.session_state["clear_input"] = True
-    
-        # Trigger a rerun immediately
+        st.session_state["loading"] = False
+
         st.rerun()
-    
-
-
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
