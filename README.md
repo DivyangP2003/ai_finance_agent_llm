@@ -1,7 +1,29 @@
+<div align="center">
+  
 # 🧠 AI Market Intelligence — Multi-Agent Decision Framework  
 ### A Global Multi-Agent Financial Analysis & Decision Support System
 
-[Visit the Website](https://aifinanceagentllm.streamlit.app/)
+<p align="center">
+    <!-- LangChain -->
+  <img src="https://img.shields.io/badge/LangChain-1C3A70?style=for-the-badge&logo=chainlink&logoColor=white"/>
+    <!-- LLM -->
+  <img src="https://img.shields.io/badge/LLM-7A1CAC?style=for-the-badge&logo=spark&logoColor=white"/>
+  <!-- AI Agents -->
+  <img src="https://img.shields.io/badge/AI%20Agents-Multi--Agent%20System-0A84FF?style=for-the-badge&logo=robot&logoColor=white"/>
+  <!-- Yahoo Finance -->
+  <img src="https://img.shields.io/badge/Yahoo%20Finance-720E9E?style=for-the-badge&logo=yahoo&logoColor=white"/>
+  <!-- Python Version -->
+  <img src="https://img.shields.io/badge/Python%2B-blue?style=for-the-badge&logo=python&logoColor=white"/>
+  <!-- Streamlit -->
+  <img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white"/>
+  <!-- Gemini / Google AI -->
+  <img src="https://img.shields.io/badge/Gemini%202.0-4285F4?style=for-the-badge&logo=google&logoColor=white"/>
+
+</p>
+
+## [Visit the Website](https://aifinanceagentllm.streamlit.app/)
+
+</div>
 
 **AI Market Intelligence** is an advanced, multi-agent financial analytics platform powered by **Google Gemini 2.0**.  
 It enables **researchers**, **traders**, **asset managers**, and **risk professionals** to:
