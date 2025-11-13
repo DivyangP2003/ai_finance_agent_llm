@@ -2031,6 +2031,8 @@ Guidelines:
         "Ask anything about markets, stocks or portfolio:",
         key="chat_input"
     )
+    st.markdown("<span style='color:gray;'>Press <b>Enter</b> to apply</span>", unsafe_allow_html=True)
+
     
     
     # Detect Enter press (text input changed)
