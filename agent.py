@@ -1523,100 +1523,154 @@ with tabs[3]:
                 st.table(df_es[["CVaR_pct","Sortino"]])
 
 
-# --- AI Dashboard Tab (REPLACE YOUR EXISTING AI DASHBOARD BLOCK WITH THIS) ---
+# --- AI Dashboard Tab (REPLACE the existing AI Dashboard block) ---
 with tabs[4]:
-    st.header("📈 AI Market Intelligence Dashboard — Interactive (Ask Gemini)")
+    st.header("📈 AI Market Intelligence Dashboard (Interactive + Agent-Routed)")
 
+    # --- Helper: Chart-to-Agent routing and conversation functions ---
+    CHART_ROUTING = {
+        "cum_returns_1y": "TeamLeadAgent",
+        "alpha_beta_scatter": "RiskAnalystAgent",
+        "rolling_corr_63": "RiskAnalystAgent",
+        "alloc_comparison": "PortfolioStrategistAgent",
+        "sector_treemap": "CompanyResearchAgent",
+        "stress_test_10pct": "RiskAnalystAgent",
+        "efficient_frontier": "PortfolioStrategistAgent",
+        "risk_contribution": "RiskAnalystAgent",
+        "rolling_sharpe_63": "RiskAnalystAgent",
+        "market_regime": "MarketAnalystAgent",
+        "monte_carlo": "RiskAnalystAgent"
+    }
+
+    def ask_gemini_for_chart(chart_id: str, chart_desc: str, chart_stats: str, user_message: str = None, agent_override: str = None, prior_history=None):
+        """
+        Routes a chart analysis or chat question to the appropriate specialized agent.
+        Returns the agent's markdown text. Keeps the same agent for chart_id unless override provided.
+        """
+        agent_name = agent_override or CHART_ROUTING.get(chart_id, "MarketAnalystAgent")
+        agent = AGENTS.get(agent_name)
+        if agent is None:
+            return f"Error: Agent '{agent_name}' not available."
+
+        # Build prompt including prior conversation (to maintain context) and the current user message if provided
+        history_txt = ""
+        if prior_history:
+            # prior_history is list of (role, text) tuples
+            for role, text in prior_history:
+                # include previous user messages and assistant (agent) answers
+                history_txt += f"\n[{role}]\n{text}\n"
+
+        prompt = f"""
+You are **{agent_name}**, a specialized analyst.
+
+Chart: {chart_id}
+Description: {chart_desc}
+
+Chart stats & key numbers:
+{chart_stats}
+
+Conversation history and context:
+{history_txt}
+
+Instructions:
+- Provide a concise, clear, and actionable interpretation of the chart (3-6 sentences).
+- Highlight the main signal(s), the primary risk(s), and one actionable recommendation.
+- When the user asks follow-up questions, answer them referencing the chart context and the above stats.
+- Provide short suggested follow-up questions the user can ask next.
+
+Return the answer in Markdown. Keep responses audit-friendly and labeled where appropriate.
+"""
+        if user_message:
+            prompt += f"\nUser question: {user_message}\n"
+
+        try:
+            resp = agent.run(prompt)
+            # agent.run in your code returns an object with .content
+            return getattr(resp, "content", str(resp))
+        except Exception as e:
+            return f"Agent {agent_name} call failed: {e}"
+
+    def init_chart_session(chart_key):
+        """Ensure chat history exists in session_state for a chart."""
+        hist_key = f"chart_chat_{chart_key}_history"
+        agent_key = f"chart_chat_{chart_key}_agent"
+        if hist_key not in st.session_state:
+            st.session_state[hist_key] = []  # list of (role, text)
+        if agent_key not in st.session_state:
+            st.session_state[agent_key] = CHART_ROUTING.get(chart_key, "MarketAnalystAgent")
+
+    def post_user_message(chart_key, user_text, chart_desc, chart_stats):
+        """Append user message and call agent, saving response into session_state history."""
+        hist_key = f"chart_chat_{chart_key}_history"
+        init_chart_session(chart_key)
+        st.session_state[hist_key].append(("User", user_text))
+        agent_name = st.session_state[f"chart_chat_{chart_key}_agent"]
+        # call agent with prior history
+        reply = ask_gemini_for_chart(chart_key, chart_desc, chart_stats, user_message=user_text, agent_override=agent_name, prior_history=st.session_state[hist_key])
+        st.session_state[hist_key].append((agent_name, reply))
+        return reply
+
+    # ---------------------- Data & baseline computations ----------------------
     close_df_dash = download_close_prices(symbols, period="1y")
     bench_prices_dash = download_close_prices([benchmark], period="1y") if benchmark else pd.DataFrame()
     returns_dash = compute_returns(close_df_dash) if not close_df_dash.empty else pd.DataFrame()
 
-    # Utility: cache Gemini explanations to avoid repeated model calls for same prompt
-    @st.cache_data(ttl=60 * 60)  # cache for 1 hour
-    def get_gemini_explanation(prompt: str, agent_name: str = "MarketAnalystAgent") -> str:
-        try:
-            resp = AGENTS[agent_name].run(prompt)
-            return resp.content
-        except Exception as e:
-            return f"⚠️ Gemini call failed: {e}"
-
-    # Small helper to create the Ask-Gemini prompt
-    def build_chart_prompt(title: str, chart_notes: str, numeric_summary: dict, symbols_list: list):
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
-        summary_lines = "\n".join([f"- {k}: {v}" for k, v in numeric_summary.items()])
-        prompt = f"""
-You are MarketAnalystAgent (Gemini). The user asked for an explanation of the chart titled: "{title}".
-
-Context:
-- Symbols: {', '.join(symbols_list)}
-- Chart generated: {ts}
-- Chart notes: {chart_notes}
-
-Key numeric summary:
-{summary_lines}
-
-Tasks (concise, markdown):
-1. Provide a short plain-language Summary of the chart (3-4 sentences).
-2. Highlight 3 Key Observations / Patterns (bullet list).
-3. Provide 2 Risk Signals or red flags (if any).
-4. Give 2 short Recommendations or actions (benchmark-relative if possible).
-5. Provide a short confidence line (e.g., "Confidence: moderate — based on 1-year daily data").
-
-Return in markdown with sections: Summary, Observations, Risks, Recommendations, Confidence.
-"""
-        return prompt
-
-    # Sidebar area where Gemini answers will be displayed
-    st.sidebar.header("Gemini Chart Explanation")
-    if "gemini_chart_explanation" not in st.session_state:
-        st.session_state["gemini_chart_explanation"] = None
-        st.session_state["gemini_chart_meta"] = None
-
-    if not close_df_dash.empty:
-        # Layout: two columns for top charts
+    if close_df_dash.empty:
+        st.warning("No price data available for visualization. Add symbols or change the period.")
+    else:
+        # Layout using columns for compact UI
+        # Row 1: Cumulative returns + Alpha vs Beta
         col1, col2 = st.columns([2, 1])
-
-        # ---------------------- Cumulative Returns vs Benchmark ----------------------
         with col1:
-            st.subheader("Cumulative Returns vs Benchmark (1Y)")
-
+            st.subheader("1) Cumulative Returns vs Benchmark (1Y)")
             cum = (1 + returns_dash).cumprod()
             fig_cum = go.Figure()
             for c in cum.columns:
-                fig_cum.add_trace(go.Scatter(x=cum.index, y=cum[c], mode="lines", name=c))
+                fig_cum.add_trace(go.Scatter(x=cum.index, y=cum[c], mode="lines", name=c, hovertemplate="%{y:.2f}<extra></extra>"))
             if not bench_prices_dash.empty:
                 bench_ret = compute_returns(bench_prices_dash).iloc[:, 0]
                 bench_cum = (1 + bench_ret).cumprod()
-                fig_cum.add_trace(go.Scatter(x=bench_cum.index, y=bench_cum.values, mode="lines",
-                                             name=f"{benchmark}", line=dict(width=3, dash="dash")))
-
-            fig_cum.update_layout(template="plotly_white", yaxis_title="Growth (1 = 0%)")
+                fig_cum.add_trace(go.Scatter(x=bench_cum.index, y=bench_cum.values, mode="lines", name=f"{benchmark}", line=dict(width=3, dash="dash")))
+            fig_cum.update_layout(template="plotly_white", yaxis_title="Growth (1 = 0%)", height=420)
             st.plotly_chart(fig_cum, use_container_width=True)
 
-            # Gemini button
-            if st.button("Ask Gemini about this chart — Cumulative Returns", key="ask_cum"):
-                # prepare short numeric summary
-                numeric = {}
-                for c in cum.columns:
-                    numeric[f"{c} (1Y)"] = f"{(cum[c].iloc[-1] - 1):.2%}"
+            # chart stats for agent prompt
+            cum_stats = ""
+            try:
+                last_vals = cum.iloc[-1].to_dict()
+                cum_stats += "Latest cumulative growth:\n"
+                for k, v in last_vals.items():
+                    cum_stats += f"- {k}: {v:.2f}\n"
                 if not bench_prices_dash.empty:
-                    numeric[f"{benchmark} (1Y)"] = f"{(bench_cum.iloc[-1] - 1):.2%}"
-                prompt = build_chart_prompt(
-                    "Cumulative Returns vs Benchmark (1Y)",
-                    "Shows indexed cumulative returns for selected symbols vs benchmark.",
-                    numeric,
-                    symbols
-                )
-                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-                st.session_state["gemini_chart_meta"] = {"chart": "Cumulative Returns", "time": datetime.now().isoformat()}
+                    cum_stats += f"Benchmark final growth: {bench_cum.iloc[-1]:.2f}\n"
+            except Exception:
+                cum_stats = "Insufficient series data."
 
-        # ---------------------- Alpha vs Beta Scatter ----------------------
+            # Chat area for this chart (TeamLeadAgent)
+            chart_key = "cum_returns_1y"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (TeamLeadAgent)**")
+            # show history
+            hist_key = f"chart_chat_{chart_key}_history"
+            for role, text in st.session_state[hist_key]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+
+            user_in = st.text_input("Ask about this chart...", key=f"input_{chart_key}")
+            if st.button("Send to TeamLeadAgent", key=f"send_{chart_key}"):
+                if user_in.strip():
+                    reply = post_user_message(chart_key, user_in.strip(), "Cumulative returns vs benchmark (1y)", cum_stats)
+                    st.experimental_rerun()
+
         with col2:
-            st.subheader("Alpha vs Beta Scatter")
-            betas = {}
-            alphas = {}
+            st.subheader("2) Alpha vs Beta Scatter")
+            # compute betas & alphas vs benchmark
             if not bench_prices_dash.empty and not returns_dash.empty:
                 bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+                betas = {}
+                alphas = {}
                 for c in returns_dash.columns:
                     res = compute_alpha_tracking_error(returns_dash[c], bench_ret_full)
                     betas[c] = res["beta"]
@@ -1624,270 +1678,356 @@ Return in markdown with sections: Summary, Observations, Risks, Recommendations,
 
                 fig_ab = go.Figure()
                 fig_ab.add_trace(go.Scatter(
-                    x=list(betas.values()),
-                    y=list(alphas.values()),
-                    mode="markers+text",
-                    text=list(betas.keys()),
-                    textposition="top center"
+                    x=list(betas.values()), y=list(alphas.values()),
+                    mode="markers+text", text=list(betas.keys()), textposition="top center", marker=dict(size=10)
                 ))
-                fig_ab.update_layout(
-                    xaxis_title="Beta (Market Sensitivity)",
-                    yaxis_title="Alpha (Annualized)",
-                    template="plotly_white",
-                    height=420
-                )
+                fig_ab.update_layout(xaxis_title="Beta (Market Sensitivity)", yaxis_title="Alpha (Annualized)", template="plotly_white", height=420)
                 st.plotly_chart(fig_ab, use_container_width=True)
+                ab_stats = "Alpha & Beta for each asset:\n" + "\n".join([f"- {k}: β={betas[k]:.3f}, α={alphas[k]:.2%}" for k in betas])
             else:
-                st.info("Benchmark data required for Alpha vs Beta chart.")
+                st.info("Benchmark data required for Alpha/Beta scatter.")
+                ab_stats = "No benchmark data."
 
-            if st.button("Ask Gemini about this chart — Alpha vs Beta", key="ask_ab"):
-                numeric = {c: f"β={betas.get(c, np.nan):.2f}, α={alphas.get(c, np.nan):.2%}" for c in betas.keys()}
-                prompt = build_chart_prompt(
-                    "Alpha vs Beta Scatter",
-                    "Scatter of asset beta vs alpha relative to selected benchmark.",
-                    numeric,
-                    symbols
-                )
-                st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-                st.session_state["gemini_chart_meta"] = {"chart": "Alpha vs Beta", "time": datetime.now().isoformat()}
+            # Chat area for this chart (RiskAnalystAgent)
+            chart_key = "alpha_beta_scatter"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_ab = st.text_input("Ask about alpha/beta...", key=f"input_{chart_key}")
+            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
+                if user_in_ab.strip():
+                    _ = post_user_message(chart_key, user_in_ab.strip(), "Alpha vs Beta scatter (annualized alpha vs beta)", ab_stats)
+                    st.experimental_rerun()
 
-        # ---------------------- Rolling Correlation vs Benchmark ----------------------
-        st.subheader("Rolling 63-Day Correlation vs Benchmark")
-        if not bench_prices_dash.empty and not returns_dash.empty:
-            bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
-            fig_corr_roll = go.Figure()
-            for c in returns_dash.columns:
-                roll_corr = returns_dash[c].rolling(63).corr(bench_ret_full)
-                fig_corr_roll.add_trace(go.Scatter(x=roll_corr.index, y=roll_corr.values, mode="lines", name=c))
-            fig_corr_roll.update_layout(template="plotly_white", yaxis_title="Correlation", title="63-Day Rolling Correlation")
-            st.plotly_chart(fig_corr_roll, use_container_width=True)
-        else:
-            st.info("Benchmark data required for rolling correlation.")
+        st.markdown("---")
 
-        if st.button("Ask Gemini about this chart — Rolling Correlation", key="ask_corr"):
-            # build numeric summary: last corr + mean corr for each symbol
-            numeric = {}
+        # Row 2: Rolling correlation & Allocation comparison
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("3) Rolling 63-Day Correlation vs Benchmark")
             if not bench_prices_dash.empty:
+                bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+                fig_corr_roll = go.Figure()
                 for c in returns_dash.columns:
-                    roll = returns_dash[c].rolling(63).corr(compute_returns(bench_prices_dash).iloc[:,0])
-                    numeric[f"{c} last"] = f"{roll.iloc[-1]:.2f}" if not roll.empty else "N/A"
-                    numeric[f"{c} mean"] = f"{roll.mean():.2f}" if not roll.empty else "N/A"
-            prompt = build_chart_prompt(
-                "Rolling 63-Day Correlation vs Benchmark",
-                "Rolling correlation between each asset and the benchmark over 63-day windows.",
-                numeric,
-                symbols
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Rolling Correlation", "time": datetime.now().isoformat()}
+                    roll_corr = returns_dash[c].rolling(63).corr(bench_ret_full)
+                    fig_corr_roll.add_trace(go.Scatter(x=roll_corr.index, y=roll_corr.values, mode="lines", name=c))
+                fig_corr_roll.update_layout(template="plotly_white", yaxis_title="Correlation", title="63-Day Rolling Correlation", height=420)
+                st.plotly_chart(fig_corr_roll, use_container_width=True)
+                corr_stats = "Rolling 63-day correlation computed vs benchmark."
+            else:
+                st.info("Benchmark data required for rolling correlation.")
+                corr_stats = "No benchmark data."
 
-        # ---------------------- Allocation Pie Charts ----------------------
-        st.subheader("Portfolio Allocation Comparison (Equal • Risk-Parity • Momentum)")
-        if not returns_dash.empty:
+            # Chat (RiskAnalystAgent)
+            chart_key = "rolling_corr_63"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_corr = st.text_input("Ask about rolling correlation...", key=f"input_{chart_key}")
+            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
+                if user_in_corr.strip():
+                    _ = post_user_message(chart_key, user_in_corr.strip(), "63-day rolling correlation vs benchmark", corr_stats)
+                    st.experimental_rerun()
+
+        with c2:
+            st.subheader("4) Allocation Comparison: Equal • Risk-Parity • Momentum")
+            # allocation pies
             equal = {s: 1/len(symbols) for s in symbols}
             vols = returns_dash.std() * np.sqrt(252)
             invvol = (1 / vols)
             invvol = (invvol / invvol.sum()).round(4).to_dict()
             six_month = close_df_dash.pct_change(126).iloc[-1] if close_df_dash.shape[0] > 126 else close_df_dash.pct_change().iloc[-1]
-            mom = six_month / six_month.sum() if six_month.sum() != 0 else pd.Series(equal)
-            mom = mom.round(4).to_dict()
+            mom = six_month.clip(lower=-1).fillna(0)
+            if mom.sum() == 0:
+                mom_alloc = equal
+            else:
+                mom_alloc = (mom / mom.sum()).round(4).to_dict()
 
             fig_alloc = go.Figure()
             fig_alloc.add_trace(go.Pie(labels=list(equal.keys()), values=list(equal.values()), domain=dict(x=[0, .33]), name="Equal Weight"))
             fig_alloc.add_trace(go.Pie(labels=list(invvol.keys()), values=list(invvol.values()), domain=dict(x=[.33, .66]), name="Risk Parity"))
-            fig_alloc.add_trace(go.Pie(labels=list(mom.keys()), values=list(mom.values()), domain=dict(x=[.66, 1]), name="Momentum"))
-            fig_alloc.update_layout(title="Equal • Risk-Parity • Momentum Allocations")
+            fig_alloc.add_trace(go.Pie(labels=list(mom_alloc.keys()), values=list(mom_alloc.values()), domain=dict(x=[.66, 1]), name="Momentum"))
+            fig_alloc.update_layout(title="Equal • Risk-Parity • Momentum Allocations", height=420)
             st.plotly_chart(fig_alloc, use_container_width=True)
-        else:
-            st.info("Need at least 1 symbol with data to show allocations.")
+            alloc_stats = f"Equal: {equal}\nRisk-parity (inv-vol): {invvol}\nMomentum: {mom_alloc}"
 
-        if st.button("Ask Gemini about this chart — Allocations", key="ask_alloc"):
-            numeric = {}
-            if returns_dash is not None and not returns_dash.empty:
-                numeric["Equal"] = ", ".join([f"{k}:{v:.2%}" for k,v in equal.items()])
-                numeric["RiskParity"] = ", ".join([f"{k}:{v:.2%}" for k,v in invvol.items()])
-                numeric["Momentum"] = ", ".join([f"{k}:{v:.2%}" for k,v in mom.items()])
-            prompt = build_chart_prompt(
-                "Portfolio Allocation Comparison",
-                "Three pie charts showing Equal-weight, Risk-parity (inverse vol), and Momentum-tilt allocations.",
-                numeric,
-                symbols
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Allocations", "time": datetime.now().isoformat()}
+            # Chat (PortfolioStrategistAgent)
+            chart_key = "alloc_comparison"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (PortfolioStrategistAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_alloc = st.text_input("Ask portfolio strategist...", key=f"input_{chart_key}")
+            if st.button("Send to PortfolioStrategistAgent", key=f"send_{chart_key}"):
+                if user_in_alloc.strip():
+                    _ = post_user_message(chart_key, user_in_alloc.strip(), "Allocation comparison: Equal, Risk-Parity (inv-vol), Momentum (6M)", alloc_stats)
+                    st.experimental_rerun()
 
-        # ---------------------- Sector Exposure Treemap ----------------------
-        st.subheader("Sector Exposure Treemap")
-        sector_weights = compute_sector_exposure(symbols, weights={s:1/len(symbols) for s in symbols}) if symbols else {}
-        if sector_weights:
+        st.markdown("---")
+
+        # Row 3: Sector treemap + Stress test
+        r1, r2 = st.columns(2)
+        with r1:
+            st.subheader("5) Sector Exposure Treemap")
+            sector_weights = compute_sector_exposure(symbols, weights={s:1/len(symbols) for s in symbols})
             df_sector = pd.DataFrame({"Sector": list(sector_weights.keys()), "Weight": list(sector_weights.values())})
             fig_tree = go.Figure(go.Treemap(labels=df_sector["Sector"], parents=["Portfolio"] * len(df_sector), values=df_sector["Weight"]))
-            fig_tree.update_layout(template="plotly_white")
+            fig_tree.update_layout(template="plotly_white", height=420)
             st.plotly_chart(fig_tree, use_container_width=True)
-        else:
-            st.info("Sector metadata not available for selected symbols.")
+            treemap_stats = "\n".join([f"- {k}: {v:.2%}" for k, v in sector_weights.items()])
 
-        if st.button("Ask Gemini about this chart — Sector Exposure", key="ask_sector"):
-            numeric = {k: f"{v:.2%}" for k,v in sector_weights.items()}
-            prompt = build_chart_prompt(
-                "Sector Exposure Treemap",
-                "Treemap showing portfolio weight by sector based on yfinance metadata.",
-                numeric,
-                symbols
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Sector Exposure", "time": datetime.now().isoformat()}
+            # Chat (CompanyResearchAgent)
+            chart_key = "sector_treemap"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (CompanyResearchAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_tree = st.text_input("Ask about sector exposure...", key=f"input_{chart_key}")
+            if st.button("Send to CompanyResearchAgent", key=f"send_{chart_key}"):
+                if user_in_tree.strip():
+                    _ = post_user_message(chart_key, user_in_tree.strip(), "Sector exposure treemap based on yfinance metadata", treemap_stats)
+                    st.experimental_rerun()
 
-        # ---------------------- Stress Test Bar Chart ----------------------
-        st.subheader("Stress Test: -10% Benchmark Shock Impact")
-        if not bench_prices_dash.empty:
-            bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
-            betas_calc = {s: compute_beta(returns_dash[s], bench_ret_full) for s in symbols}
-            shock = stress_test_shock(symbols, returns_dash, bench_ret_full, shock_pct=-0.10, betas=betas_calc)
-            df_shock = pd.DataFrame({"Symbol": list(shock.keys()), "Impact (%)": [v * 100 for v in shock.values()]})
-            fig_shock = go.Figure(go.Bar(x=df_shock["Symbol"], y=df_shock["Impact (%)"] ))
-            fig_shock.update_layout(yaxis_title="Estimated Loss (%)", template="plotly_white")
-            st.plotly_chart(fig_shock, use_container_width=True)
-        else:
-            st.info("Benchmark required for stress test.")
+        with r2:
+            st.subheader("6) Stress Test: -10% Benchmark Shock Impact")
+            if not bench_prices_dash.empty:
+                bench_ret_full = compute_returns(bench_prices_dash).iloc[:, 0]
+                betas_calc = {s: compute_beta(returns_dash[s], bench_ret_full) for s in symbols}
+                shock = stress_test_shock(symbols, returns_dash, bench_ret_full, shock_pct=-0.10, betas=betas_calc)
+                df_shock = pd.DataFrame({"Symbol": list(shock.keys()), "Impact (%)": [v * 100 for v in shock.values()]})
+                fig_shock = go.Figure(go.Bar(x=df_shock["Symbol"], y=df_shock["Impact (%)"]))
+                fig_shock.update_layout(yaxis_title="Estimated Loss (%)", template="plotly_white", height=420)
+                st.plotly_chart(fig_shock, use_container_width=True)
+                shock_stats = "\n".join([f"- {k}: {v:.2%}" for k, v in shock.items()])
+            else:
+                st.info("Benchmark data required for stress testing.")
+                shock_stats = "No benchmark data."
 
-        if st.button("Ask Gemini about this chart — Stress Test", key="ask_stress"):
-            numeric = {s: f"{shock.get(s, np.nan):.2%}" for s in symbols} if 'shock' in locals() else {}
-            prompt = build_chart_prompt(
-                "Stress Test: -10% Benchmark Shock Impact",
-                "Bar chart estimating immediate P&L impact given a -10% benchmark shock using betas/correlation.",
-                numeric,
-                symbols
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="RiskAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Stress Test", "time": datetime.now().isoformat()}
+            # Chat (RiskAnalystAgent)
+            chart_key = "stress_test_10pct"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_stress = st.text_input("Ask about stress test...", key=f"input_{chart_key}")
+            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
+                if user_in_stress.strip():
+                    _ = post_user_message(chart_key, user_in_stress.strip(), "Simulated -10% benchmark shock impact", shock_stats)
+                    st.experimental_rerun()
 
-        # ---------------------- Efficient Frontier (if small universe) ----------------------
-        st.subheader("Efficient Frontier (Mean-Variance Preview)")
-        if len(symbols) <= 5 and not returns_dash.empty:
-            # Use your existing simple frontier builder (keeps tractable)
+        st.markdown("---")
+
+        # Row 4: Efficient frontier (left) & Risk contribution (right)
+        e1, e2 = st.columns(2)
+        with e1:
+            st.subheader("7) Efficient Frontier (Mean-Variance Optimization)")
             def portfolio_performance(weights, mean_returns, cov_matrix):
                 ret = np.dot(weights, mean_returns) * 252
                 vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
                 return vol, ret
 
-            mean_returns = returns_dash.mean()
-            cov_matrix = returns_dash.cov()
-            # Sample random portfolios instead of combinatorial enumeration (fast and interactive)
-            n_points = 150
-            rets = []
-            vols = []
-            weights_list = []
-            rng = np.random.default_rng(seed=42)
-            for _ in range(n_points):
-                w = rng.random(len(mean_returns))
-                w = w / w.sum()
-                vol, ret = portfolio_performance(w, mean_returns, cov_matrix)
-                rets.append(ret)
-                vols.append(vol)
-                weights_list.append(w)
+            def efficient_frontier(returns, num_points=40):
+                mean_returns = returns.mean()
+                cov_matrix = returns.cov()
+                # use a simple random search for weights (for practicality)
+                results = {"vol": [], "ret": [], "weights": []}
+                n = len(mean_returns)
+                rng = np.random.default_rng(0)
+                for target in np.linspace(mean_returns.min(), mean_returns.max(), num_points):
+                    best_vol = 1e9
+                    best = None
+                    for _ in range(3000):  # randomized search
+                        w = rng.random(n)
+                        w = w / w.sum()
+                        vol, ret = portfolio_performance(w, mean_returns, cov_matrix)
+                        if abs(ret - target) < 0.01 and vol < best_vol:
+                            best_vol = vol
+                            best = (ret, vol, w)
+                    if best:
+                        results["ret"].append(best[0])
+                        results["vol"].append(best[1])
+                        results["weights"].append(best[2])
+                return results
 
-            fig_ef = go.Figure()
-            fig_ef.add_trace(go.Scatter(x=vols, y=rets, mode="markers", name="Portfolios", marker=dict(opacity=0.7)))
-            eq_w = np.array([1/len(symbols)] * len(symbols))
-            eq_vol, eq_ret = portfolio_performance(eq_w, mean_returns, cov_matrix)
-            fig_ef.add_trace(go.Scatter(x=[eq_vol], y=[eq_ret], mode="markers", name="Equal Weight", marker=dict(size=12, symbol="star")))
-            fig_ef.update_layout(xaxis_title="Volatility (Annualized)", yaxis_title="Expected Return (Annualized)", template="plotly_white")
-            st.plotly_chart(fig_ef, use_container_width=True)
-        else:
-            st.info("Efficient frontier preview limited to ≤ 5 assets and requires data.")
+            if len(symbols) <= 6:
+                frontier = efficient_frontier(returns_dash)
+                fig_ef = go.Figure()
+                fig_ef.add_trace(go.Scatter(x=frontier["vol"], y=frontier["ret"], mode="markers", name="Efficient Frontier"))
+                eq_w = np.array([1/len(symbols)] * len(symbols))
+                eq_vol, eq_ret = portfolio_performance(eq_w, returns_dash.mean(), returns_dash.cov())
+                fig_ef.add_trace(go.Scatter(x=[eq_vol], y=[eq_ret], mode="markers", name="Equal Weight", marker=dict(size=12, symbol="star")))
+                fig_ef.update_layout(xaxis_title="Volatility (Annualized)", yaxis_title="Expected Return (Annualized)", template="plotly_white", height=420)
+                st.plotly_chart(fig_ef, use_container_width=True)
+                ef_stats = f"Efficient frontier computed (random-search). Points: {len(frontier['ret'])}"
+            else:
+                st.info("Efficient frontier limited to ≤ 6 assets for tractability.")
+                ef_stats = "Not computed (too many assets)."
 
-        if st.button("Ask Gemini about this chart — Efficient Frontier", key="ask_ef"):
-            numeric = {"Sample portfolios": n_points if 'n_points' in locals() else "N/A", "EqualWeight": f"Vol:{eq_vol:.3f}, Ret:{eq_ret:.3f}"}
-            prompt = build_chart_prompt(
-                "Efficient Frontier (Mean-Variance Preview)",
-                "Cloud of randomly sampled portfolios (mean-variance) with an equal-weight marker.",
-                numeric,
-                symbols
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="PortfolioStrategistAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Efficient Frontier", "time": datetime.now().isoformat()}
+            # Chat (PortfolioStrategistAgent)
+            chart_key = "efficient_frontier"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (PortfolioStrategistAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_ef = st.text_input("Ask about efficient frontier...", key=f"input_{chart_key}")
+            if st.button("Send to PortfolioStrategistAgent", key=f"send_{chart_key}"):
+                if user_in_ef.strip():
+                    _ = post_user_message(chart_key, user_in_ef.strip(), "Efficient frontier (mean-variance optimization)", ef_stats)
+                    st.experimental_rerun()
 
-        # ---------------------- Rolling Sharpe Ratio ----------------------
-        st.subheader("Rolling Sharpe Ratio (63-Day)")
-        if not returns_dash.empty:
-            roll_sharpe_fig = go.Figure()
+        with e2:
+            st.subheader("8) Risk Contribution (Equal-Weight Portfolio)")
+            cov = returns_dash.cov()
+            weights = np.array([1/len(symbols)] * len(symbols))
+            port_vol = np.sqrt(weights @ cov @ weights)
+            if port_vol == 0:
+                risk_contrib = np.zeros(len(symbols))
+            else:
+                risk_contrib = weights * (cov @ weights) / port_vol
+            df_rc = pd.DataFrame({"Symbol": symbols, "Contribution (%)": (risk_contrib * 100)})
+            fig_rc = go.Figure(go.Bar(x=df_rc["Symbol"], y=df_rc["Contribution (%)"], marker=dict(line=dict(width=1))))
+            fig_rc.update_layout(yaxis_title="Portfolio Risk Contribution (%)", template="plotly_white", height=420)
+            st.plotly_chart(fig_rc, use_container_width=True)
+            rc_stats = "\n".join([f"- {s}: {v:.2f}%" for s, v in zip(df_rc["Symbol"], df_rc["Contribution (%)"])])
+
+            # Chat (RiskAnalystAgent)
+            chart_key = "risk_contribution"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_rc = st.text_input("Ask about risk contribution...", key=f"input_{chart_key}")
+            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
+                if user_in_rc.strip():
+                    _ = post_user_message(chart_key, user_in_rc.strip(), "Risk contribution breakdown for equal-weight portfolio", rc_stats)
+                    st.experimental_rerun()
+
+        st.markdown("---")
+
+        # Row 5: Rolling Sharpe & Market Regime
+        s1, s2 = st.columns(2)
+        with s1:
+            st.subheader("9) Rolling Sharpe Ratio (63-Day)")
             window = 63
+            roll_sharpe_fig = go.Figure()
             for c in returns_dash.columns:
                 roll_ret = returns_dash[c].rolling(window).mean() * 252
                 roll_vol = returns_dash[c].rolling(window).std() * np.sqrt(252)
                 rs = roll_ret / roll_vol
                 roll_sharpe_fig.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=c))
-            roll_sharpe_fig.update_layout(template="plotly_white", yaxis_title="Sharpe Ratio")
+            roll_sharpe_fig.update_layout(template="plotly_white", yaxis_title="Sharpe Ratio", height=420)
             st.plotly_chart(roll_sharpe_fig, use_container_width=True)
-        else:
-            st.info("Data required to compute rolling Sharpe.")
+            rs_stats = "Rolling 63-day Sharpe for each asset."
 
-        if st.button("Ask Gemini about this chart — Rolling Sharpe", key="ask_rs"):
-            numeric = {}
-            if not returns_dash.empty:
-                for c in returns_dash.columns:
-                    rs = (returns_dash[c].rolling(63).mean()*252) / (returns_dash[c].rolling(63).std()*np.sqrt(252))
-                    numeric[f"{c} last_sharpe"] = f"{rs.iloc[-1]:.3f}" if not rs.empty else "N/A"
-            prompt = build_chart_prompt(
-                "Rolling Sharpe Ratio (63-Day)",
-                "Rolling Sharpe ratio per asset using 63-day windows (annualized).",
-                numeric,
-                symbols
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": "Rolling Sharpe", "time": datetime.now().isoformat()}
+            # Chat (RiskAnalystAgent)
+            chart_key = "rolling_sharpe_63"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_rs = st.text_input("Ask about rolling Sharpe...", key=f"input_{chart_key}")
+            if st.button("Send to RiskAnalystAgent", key=f"send_{chart_key}"):
+                if user_in_rs.strip():
+                    _ = post_user_message(chart_key, user_in_rs.strip(), "Rolling 63-day Sharpe ratio", rs_stats)
+                    st.experimental_rerun()
 
-        # ---------------------- Monte Carlo Simulation ----------------------
-        st.subheader("Monte Carlo Simulation (1-Year)")
+        with s2:
+            st.subheader("10) Market Regime Detection (Volatility Regimes)")
+            bench_ret_reg = compute_returns(bench_prices_dash).iloc[:,0] if not bench_prices_dash.empty else None
+            if bench_ret_reg is not None:
+                roll_vol = bench_ret_reg.rolling(63).std() * np.sqrt(252)
+                thresholds = roll_vol.quantile([0.33, 0.66])
+                low, high = thresholds[0.33], thresholds[0.66]
+                fig_reg = go.Figure()
+                fig_reg.add_trace(go.Scatter(x=roll_vol.index, y=roll_vol.values, mode="lines", name="Volatility"))
+                fig_reg.add_hrect(y0=0, y1=low, fillcolor="green", opacity=0.12, line_width=0)
+                fig_reg.add_hrect(y0=low, y1=high, fillcolor="yellow", opacity=0.12, line_width=0)
+                fig_reg.add_hrect(y0=high, y1=roll_vol.max(), fillcolor="red", opacity=0.12, line_width=0)
+                fig_reg.update_layout(title="Market Regime via Volatility", yaxis_title="Annualized Volatility", template="plotly_white", height=420)
+                st.plotly_chart(fig_reg, use_container_width=True)
+                regime_stats = f"Volatility quantiles: low={low:.2%}, high={high:.2%}"
+            else:
+                st.info("Benchmark data required for regime detection.")
+                regime_stats = "No benchmark data."
+
+            # Chat (MarketAnalystAgent)
+            chart_key = "market_regime"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (MarketAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_reg = st.text_input("Ask about market regime...", key=f"input_{chart_key}")
+            if st.button("Send to MarketAnalystAgent", key=f"send_{chart_key}"):
+                if user_in_reg.strip():
+                    _ = post_user_message(chart_key, user_in_reg.strip(), "Market regime detection via benchmark rolling volatility", regime_stats)
+                    st.experimental_rerun()
+
+        st.markdown("---")
+
+        # Row 6: Monte Carlo Simulation
+        st.subheader("11) Monte Carlo Simulation (1-Year)")
         symbol_mc = st.selectbox("Select symbol for simulation", symbols, key="mc_symbol_select")
         last_price = close_df_dash[symbol_mc].iloc[-1]
         vol_mc = returns_dash[symbol_mc].std() * np.sqrt(252)
         mu_mc = returns_dash[symbol_mc].mean() * 252
-        days = 252
-        paths = 200
-        sim_paths = np.zeros((days, paths))
-        rng = np.random.default_rng(seed=1)
-        for i in range(paths):
-            daily = rng.normal(mu_mc/days, vol_mc/np.sqrt(days), days)
-            sim_paths[:, i] = last_price * np.cumprod(1 + daily)
+        days = st.number_input("Simulation days", value=252, min_value=30, max_value=252*2, step=1, key="mc_days")
+        paths = st.number_input("Simulation paths", value=200, min_value=10, max_value=2000, step=10, key="mc_paths")
+        if st.button("Run Monte Carlo", key="run_mc"):
+            sim_paths = np.zeros((days, paths))
+            rng = np.random.default_rng(42)
+            for i in range(paths):
+                daily = rng.normal(mu_mc/days, vol_mc/np.sqrt(days), days)
+                sim_paths[:, i] = last_price * np.cumprod(1 + daily)
+            fig_mc = go.Figure()
+            for i in range(paths):
+                fig_mc.add_trace(go.Scatter(x=np.arange(days), y=sim_paths[:, i], mode="lines", showlegend=False, line=dict(width=1)))
+            fig_mc.update_layout(title=f"Monte Carlo Price Simulation: {symbol_mc}", template="plotly_white", height=450)
+            st.plotly_chart(fig_mc, use_container_width=True)
+            mc_stats = f"Simulated {paths} paths over {days} days for {symbol_mc}. μ={mu_mc:.2%}, σ={vol_mc:.2%}"
 
-        fig_mc = go.Figure()
-        for i in range(min(paths, 100)):  # show at most 100 lines for performance
-            fig_mc.add_trace(go.Scatter(x=np.arange(days), y=sim_paths[:, i], mode="lines", showlegend=False, line=dict(width=1)))
-        fig_mc.update_layout(title=f"Monte Carlo Price Simulation: {symbol_mc}", template="plotly_white")
-        st.plotly_chart(fig_mc, use_container_width=True)
-
-        if st.button("Ask Gemini about this chart — Monte Carlo", key="ask_mc"):
-            numeric = {
-                "last_price": f"{last_price:.2f}",
-                "mu_ann": f"{mu_mc:.2%}",
-                "vol_ann": f"{vol_mc:.2%}",
-                "paths": paths
-            }
-            prompt = build_chart_prompt(
-                f"Monte Carlo Simulation: {symbol_mc}",
-                "Simulated price paths for the next 1 year using geometric random-walk assumptions (normal returns).",
-                numeric,
-                [symbol_mc]
-            )
-            st.session_state["gemini_chart_explanation"] = get_gemini_explanation(prompt, agent_name="MarketAnalystAgent")
-            st.session_state["gemini_chart_meta"] = {"chart": f"Monte Carlo ({symbol_mc})", "time": datetime.now().isoformat()}
-
-    else:
-        st.info("No data available for visualization in the dashboard. Provide symbols and a benchmark to enable charts.")
-
-    # ---------------------- Sidebar: show the Gemini response when available ----------------------
-    if st.session_state.get("gemini_chart_explanation"):
-        meta = st.session_state.get("gemini_chart_meta", {})
-        st.sidebar.markdown(f"**Chart:** {meta.get('chart', 'N/A')}")
-        st.sidebar.markdown(f"**Generated at:** {meta.get('time', '')}")
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(st.session_state["gemini_chart_explanation"])
-        if st.sidebar.button("Clear explanation"):
-            st.session_state["gemini_chart_explanation"] = None
-            st.session_state["gemini_chart_meta"] = None
-
+            # Chat (RiskAnalystAgent)
+            chart_key = "monte_carlo"
+            init_chart_session(chart_key)
+            st.markdown("**Interactive Commentary (RiskAnalystAgent)**")
+            for role, text in st.session_state[f"chart_chat_{chart_key}_history"]:
+                if role == "User":
+                    st.markdown(f"**You:** {text}")
+                else:
+                    st.markdown(f"**{role}:** {text}")
+            user_in_mc = st.text_input("Ask about Monte Carlo results...", key=f"input_{chart_key}")
+            if st.button("Send to RiskAnalystAgent_MC", key=f"send_{chart_key}_mc"):
+                if user_in_mc.strip():
+                    _ = post_user_message(chart_key, user_in_mc.strip(), f"Monte Carlo simulation for {symbol_mc}", mc_stats)
+                    st.experimental_rerun()
 
 # --- Portfolio Strategist Tab ---
 with tabs[5]:
