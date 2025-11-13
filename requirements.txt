@@ -10,4 +10,3 @@ feedparser
 fpdf
 statsmodels
 tabulate
-itertools
