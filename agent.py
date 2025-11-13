@@ -1920,7 +1920,7 @@ with tabs[6]:
     def render_message(role, markdown_text):
         bg = USER_COLOR if role == "user" else AI_COLOR
         label = "You" if role == "user" else "AI"
-
+    
         st.markdown(
             f"""
             <div style="
@@ -1931,17 +1931,22 @@ with tabs[6]:
                 color:{TEXT_COLOR};
                 font-family: 'Inter', sans-serif;
             ">
-                <div style="font-weight:600; margin-bottom:6px; opacity:0.9;">
+                <div style="font-weight:600; margin-bottom:10px; opacity:0.9;">
                     {label}
                 </div>
-
-                <div style="font-size:15px; line-height:1.6;">
-                    {markdown_text}
-                </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+        st.markdown(markdown_text)
+    
+        st.markdown(
+            """
             </div>
             """,
             unsafe_allow_html=True
         )
+
 
     # Render all chat messages
     for role, msg in st.session_state["chat_history"]:
