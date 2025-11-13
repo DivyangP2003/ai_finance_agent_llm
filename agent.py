@@ -1917,29 +1917,32 @@ with tabs[6]:
     AI_COLOR = "#0f0f0f"        # Deep black
     TEXT_COLOR = "white"
 
-    def render_message(role, markdown_text):
-        """
-        Render a ChatGPT-style bubble with markdown inside.
-        Safe: HTML wrapper + Streamlit markdown rendering.
-        """
+   def render_message(role, markdown_text):
         bg = USER_COLOR if role == "user" else AI_COLOR
         label = "You" if role == "user" else "AI"
-
-        # Outer bubble container
+    
         st.markdown(
             f"""
             <div style="
                 background:{bg};
                 padding:14px 18px;
-                margin:10px 0;
-                border-radius:12px;
+                margin:12px 0;
+                border-radius:14px;
                 color:{TEXT_COLOR};
+                font-family: 'Inter', sans-serif;
             ">
-            <b>{label}:</b>
+                <div style="font-weight:600; margin-bottom:6px; opacity:0.9;">
+                    {label}
+                </div>
+    
+                <div style="font-size:15px; line-height:1.6;">
+                    {markdown_text}
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
 
         # Now render markdown **under** the bubble header
         container = st.container()
