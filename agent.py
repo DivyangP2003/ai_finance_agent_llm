@@ -1917,40 +1917,40 @@ with tabs[6]:
 
     def render_message(role, markdown_text):
 
-    # Bubble alignment
-    align = "flex-end" if role == "user" else "flex-start"
-
-    # Bubble colors
-    bubble_color = "#1E1E1E" if role == "assistant" else "#2A2A2A"
-    text_color = "white"
-    label = "You" if role == "user" else "AI"
-
-    st.markdown(
-        f"""
-        <div style="
-            display:flex;
-            justify-content:{align};
-            margin-bottom:12px;
-        ">
-            <div style="
-                max-width:70%;
-                background:{bubble_color};
-                padding:14px 18px;
-                border-radius:18px;
-                color:{text_color};
-                font-size:16px;
-                line-height:1.5;
-                box-shadow:0px 0px 4px rgba(0,0,0,0.35);
-            ">
-                <div style="opacity:0.65; font-size:13px; margin-bottom:4px;">
-                    <b>{label}</b>
-                </div>
-                {markdown_text}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        # Bubble alignment
+        align = "flex-end" if role == "user" else "flex-start"
+    
+        # Bubble colors
+        bubble_color = "#1E1E1E" if role == "assistant" else "#2A2A2A"
+        text_color = "white"
+        label = "You" if role == "user" else "AI"
+    
+        st.markdown(
+                    f"""
+                    <div style="
+                        display:flex;
+                        justify-content:{align};
+                        margin-bottom:12px;
+                    ">
+                        <div style="
+                            max-width:70%;
+                            background:{bubble_color};
+                            padding:14px 18px;
+                            border-radius:18px;
+                            color:{text_color};
+                            font-size:16px;
+                            line-height:1.5;
+                            box-shadow:0px 0px 4px rgba(0,0,0,0.35);
+                        ">
+                            <div style="opacity:0.65; font-size:13px; margin-bottom:4px;">
+                                <b>{label}</b>
+                            </div>
+                            {markdown_text}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 
         # Now render markdown **under** the bubble header
