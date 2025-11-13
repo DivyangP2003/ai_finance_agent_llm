@@ -1939,10 +1939,11 @@ with tabs[6]:
     # Contextual Prompt Builder
     # -------------------------------------------------
     def build_contextual_prompt(user_query):
-        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
+        history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-8:]])
 
         return f"""
-You are a conversational financial assistant connected to a multi-agent research system.
+You are an advanced conversational financial assistant with an intelligent multi-agent backend. 
+Respond in a natural, fluid, GPT-style manner — conversational, insightful, and context-aware.
 
 User tickers: {symbols}
 Country: {selected_country}
@@ -1953,26 +1954,11 @@ Recent conversation:
 
 User query: {user_query}
 
-Respond in a clean, structured, readable format using plain text only. 
-Follow this structure when appropriate:
-
-1. Summary
-   - Brief 2–3 sentence overview.
-
-2. Key Insights
-   - Short bullet points with the most important findings.
-
-3. Detailed Explanation
-   - Deeper reasoning, comparisons, analysis or context.
-   - Use line breaks for readability.
-
-4. Next Steps / Recommendations
-   - Practical follow-ups tailored to the user’s portfolio.
-
-Rules:
-- Do NOT use HTML, markdown, bold text, tables, or special formatting.
-- Use plain text only.
-- If deeper analysis is needed, call the correct agent and summarize the results clearly.
+Instructions:
+- Speak naturally, like a helpful financial expert.
+- Structure your response however you see fit based on the question.
+- Do NOT include any HTML in your response.
+- If deeper analysis is needed, call the correct agent and present the insights in a smooth, human-like way.
 """
 
     # -------------------------------------------------
