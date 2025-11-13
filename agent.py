@@ -1907,18 +1907,23 @@ with tabs[5]:
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
 
-    # initialize chat history
+    import html
+
+    def safe_text(text: str):
+        return html.escape(text).replace("\n", "<br>")
+
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
     def render_chat():
         for role, msg in st.session_state["chat_history"]:
+            safe_msg = safe_text(msg)
             color = "#242017" if role == "user" else "#0f0f0f"
             label = "You" if role == "user" else "AI"
             st.markdown(
                 f"""
-                <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
-                    <b>{label}:</b><br>{msg}
+                <div style='padding:12px; margin:8px 0; background:{color}; border-radius:10px; color:white;'>
+                    <b>{label}:</b><br>{safe_msg}
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1948,21 +1953,14 @@ If the question requires deeper analysis, call the correct agent and summarize r
     user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
 
     if st.button("Send") and user_input:
-        # add user msg
         st.session_state["chat_history"].append(("user", user_input))
 
-        # build prompt
         prompt = build_contextual_prompt(user_input)
-
-        # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
-        # add to history
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
-        # rerender
         st.rerun()
-
 
 # --- Audit & Exports Tab ---
 with tabs[7]:
