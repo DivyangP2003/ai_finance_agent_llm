@@ -1055,42 +1055,60 @@ Your report must include the following sections in Markdown:
     return response.content
 
 # --------------------------- Natural Language Query Interface --------------------------- #
-def interpret_user_query(query, symbols, close_df):
-    """
-    Simple router: sample common queries -> run relevant agent(s).
-    For complex open-ended queries, send to TeamLeadAgent or MarketAnalystAgent to interpret and return steps.
-    """
+def interpret_user_query(query, symbols, close_df=None):
     q = query.lower()
 
-    # Hard-coded routing for common queries
-    if "volatility" in q or "volatilit" in q:
-        # show rolling volatility & ask market agent to interpret
-        rolling = rolling_volatility(compute_returns(close_df))
-        # prepare visual separately in Streamlit
-        agent_response = AGENTS["MarketAnalystAgent"].run(
-            f"You are MarketAnalystAgent. The user asked: '{query}'. Provide an interpretation of recent volatility patterns for {', '.join(symbols)}. "
-            "Include 'Rationale:' and 'Recommendation:'."
+    # === 1. Definitions / Concept Questions ===
+    if any(k in q for k in ["what is", "define", "meaning of", "explain", "difference between"]):
+        resp = AGENTS["TeamLeadAgent"].run(
+            f"You are a senior financial explainer. Explain clearly and concisely:\n\n{query}\n\nUse examples and tables when helpful."
         )
-        return agent_response.content, {"type": "rolling_vol", "data": rolling}
-    elif "sharpe" in q or "sharpe ratio" in q:
-        # compute portfolio-level sharpe assuming equal-weight unless user provides holdings
-        returns = compute_returns(close_df)
-        # portfolio returns equal-weight
-        port_returns = returns.mean(axis=1)
-        sr = sharpe_ratio(port_returns)
-        agent_response = AGENTS["PortfolioStrategistAgent"].run(
-            f"You are PortfolioStrategistAgent. The user asked: '{query}'. Provide interpretation of portfolio Sharpe ratio: {sr:.4f} (annualized). "
-            "Include 'Rationale:' and 'Recommendation:'."
+        return resp.content, {"type": "definition"}
+
+    # === 2. News Questions ===
+    if any(k in q for k in ["news", "headlines", "recent", "latest"]):
+        results = {s: fetch_news(s, limit=5) for s in symbols}
+        resp = AGENTS["SentimentAgent"].run(
+            f"Summarize and interpret the following news for symbols {symbols}:\n{results}"
         )
-        return agent_response.content, {"type": "sharpe", "value": sr}
-    elif "sentiment" in q:
-        # run sentiment agent for each symbol and summarize
-        sentiments = {s: run_sentiment_agent(s) for s in symbols}
-        return "Sentiment summary generated for requested symbols.", {"type": "sentiments", "data": sentiments}
-    else:
-        # fallback: let teamlead try to interpret and produce guidance
-        team_resp = AGENTS["TeamLeadAgent"].run(f"You are TeamLeadAgent. The user query: {query}. The symbols in scope are: {', '.join(symbols)}. Provide an action plan and which analyses to run. Include 'Rationale:' and 'Recommendation:'.")
-        return team_resp.content, {"type": "generic", "text": team_resp.content}
+        return resp.content, {"type": "news", "data": results}
+
+    # === 3. Performance Questions ===
+    if any(k in q for k in ["performance", "return", "trend", "up or down"]):
+        if close_df is not None:
+            returns = compute_returns(close_df)
+        resp = AGENTS["MarketAnalystAgent"].run(
+            f"User asked: {query}. Provide price and performance interpretation for {symbols}."
+        )
+        return resp.content, {"type": "performance"}
+
+    # === 4. Risk Questions ===
+    if any(k in q for k in ["risk", "drawdown", "beta", "cvar", "var", "sortino", "volatility"]):
+        resp = AGENTS["RiskAnalystAgent"].run(
+            f"User asked: {query}. Provide risk explanation for {symbols}. Include benchmarks."
+        )
+        return resp.content, {"type": "risk"}
+
+    # === 5. Portfolio Questions ===
+    if any(k in q for k in ["portfolio", "allocation", "weight", "rebalance"]):
+        resp = AGENTS["PortfolioStrategistAgent"].run(
+            f"User asked: {query}. Provide portfolio guidance for symbols {symbols} vs benchmark."
+        )
+        return resp.content, {"type": "portfolio"}
+
+    # === 6. Comparison Questions ===
+    if "vs" in q or "compare" in q:
+        resp = AGENTS["MarketAnalystAgent"].run(
+            f"Compare the following: {query}. Use tables and benchmark-relative insights."
+        )
+        return resp.content, {"type": "comparison"}
+
+    # === 7. Fallback: Use TeamLead for reasoning ===
+    resp = AGENTS["TeamLeadAgent"].run(
+        f"You are the general reasoning agent. Answer this conversationally:\n{query}"
+    )
+    return resp.content, {"type": "generic"}
+
 
 def normalize_symbols(symbols, country, exchange_suffix=""):
     """
