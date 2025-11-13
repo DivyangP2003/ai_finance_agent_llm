@@ -1923,17 +1923,22 @@ with tabs[6]:
         for role, msg in st.session_state["chat_history"]:
             color = "#242321" if role == "user" else "#080604"
             label = "You" if role == "user" else "AI"
-
-            safe_msg = html.escape(msg).replace("\n", "<br>")
-
+    
+            # Remove HTML tags but KEEP markdown
+            cleaned_msg = re.sub(r"<.*?>", "", msg)
+    
             st.markdown(
                 f"""
                 <div style='padding:10px; margin:8px 0; background:{color}; border-radius:10px;'>
-                    <b>{label}:</b><br>{safe_msg}
+                    <b>{label}:</b><br>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
+    
+            # Render markdown natively (tables, bold, lists, etc.)
+            st.markdown(cleaned_msg)
+
 
     # -------------------------------------------------
     # Contextual Prompt Builder
