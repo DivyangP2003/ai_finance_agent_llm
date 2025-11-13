@@ -1914,7 +1914,7 @@ with tabs[6]:
 
     def render_chat():
         for role, msg in st.session_state["chat_history"]:
-            color = "#DCF8C6" if role == "user" else "#F1F0F0"
+            color = "#242321" if role == "user" else "#080604"
             label = "You" if role == "user" else "AI"
             st.markdown(
                 f"""
