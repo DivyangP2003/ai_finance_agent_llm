@@ -1904,6 +1904,9 @@ with tabs[5]:
             st.markdown("### Allocation Recommendation (XAI)")
             st.markdown(strategy_text)
 
+import streamlit as st
+import markdown as md
+
 with tabs[6]:
     st.header("💬 Conversational Chat Assistant")
 
@@ -1915,7 +1918,7 @@ with tabs[6]:
     # --------------------------
     def render_message(role, markdown_text):
 
-        is_user = role == "user"
+        is_user = (role == "user")
 
         # Avatar symbols
         avatar = "🧑" if is_user else "🤖"
@@ -1924,61 +1927,58 @@ with tabs[6]:
         row_align = "flex-end" if is_user else "flex-start"
         bubble_align = "row-reverse" if is_user else "row"
 
-        # Bubble color
+        # Colors
         bubble_color = "#2A2A2A" if is_user else "#1E1E1E"
 
-        st.markdown(
-            f"""
-            <div style="display:flex; justify-content:{row_align}; margin:10px 0;">
-                <div style="display:flex; flex-direction:{bubble_align}; gap:10px; align-items:flex-start; max-width:80%;">
-                    
-                    <!-- Avatar -->
-                    <div style="
-                        width:38px;
-                        height:38px;
-                        background:#3A3A3A;
-                        border-radius:50%;
-                        display:flex;
-                        align-items:center;
-                        justify-content:center;
-                        font-size:20px;
-                        color:white;
-                        flex-shrink:0;
-                    ">
-                        {avatar}
-                    </div>
+        # Convert markdown → HTML
+        html_content = md.markdown(markdown_text)
 
-                    <!-- Bubble -->
-                    <div style="
-                        background:{bubble_color};
-                        color:white;
-                        padding:14px 18px;
-                        border-radius:18px;
-                        font-size:16px;
-                        line-height:1.55;
-                        box-shadow:0px 0px 6px rgba(0,0,0,0.35);
-                        white-space:pre-wrap;
-                        overflow-wrap:break-word;
-                        width:100%;
-                    ">
-            """,
-            unsafe_allow_html=True
-        )
-
-        # Render markdown INSIDE bubble
-        st.markdown(markdown_text, unsafe_allow_html=False)
-
-        st.markdown(
-            """
-                    </div>
+        # Build full HTML bubble (avatar + message)
+        html = f"""
+        <div style="display:flex; justify-content:{row_align}; margin:12px 0;">
+            <div style="display:flex; flex-direction:{bubble_align}; gap:10px; align-items:flex-start; max-width:80%;">
+                
+                <!-- Avatar -->
+                <div style="
+                    width:38px;
+                    height:38px;
+                    background:#3A3A3A;
+                    border-radius:50%;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    font-size:20px;
+                    color:white;
+                    flex-shrink:0;
+                ">
+                    {avatar}
                 </div>
+
+                <!-- Bubble -->
+                <div style="
+                    background:{bubble_color};
+                    color:white;
+                    padding:14px 18px;
+                    border-radius:18px;
+                    font-size:16px;
+                    line-height:1.55;
+                    box-shadow:0px 0px 6px rgba(0,0,0,0.35);
+                    white-space:normal;
+                    overflow-wrap:break-word;
+                    width:auto;
+                    max-width:100%;
+                ">
+                    {html_content}
+                </div>
+
             </div>
-            """,
-            unsafe_allow_html=True
-        )
+        </div>
+        """
+
+        st.markdown(html, unsafe_allow_html=True)
 
     # --------------------------
-    # Context Building
+    # Build prompt for the agent
     # --------------------------
     def build_contextual_prompt(user_query):
         history = "\n".join([f"{r}: {m}" for r, m in st.session_state["chat_history"][-5:]])
@@ -1996,7 +1996,7 @@ User query: {user_query}
 """
 
     # --------------------------
-    # Display chat
+    # Render previous chat
     # --------------------------
     for role, msg in st.session_state["chat_history"]:
         render_message(role, msg)
@@ -2008,11 +2008,13 @@ User query: {user_query}
 
     if st.button("Send") and user_input.strip():
 
+        # Save user msg
         st.session_state["chat_history"].append(("user", user_input))
 
         prompt = build_contextual_prompt(user_input)
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
 
+        # Save assistant reply
         st.session_state["chat_history"].append(("assistant", ai_reply))
 
         st.rerun()
