@@ -1930,9 +1930,14 @@ with tabs[6]:
             bubble_bg = "#3b3b3b" if is_user else "#1e1e1e"
             border_color = "#6c6cff" if is_user else "#00c2ff"
             text_color = "white"
-            label = "You" if is_user else "AI"
     
+            # Clean HTML tags
             cleaned_msg = re.sub(r"<.*?>", "", msg)
+    
+            # Use first line of message as header (truncated for cleanliness)
+            title_line = cleaned_msg.strip().split("\n")[0]
+            if len(title_line) > 60:
+                title_line = title_line[:60] + "..."
     
             st.markdown(
                 f"""
@@ -1952,14 +1957,14 @@ with tabs[6]:
                         font-size:16px;
                         line-height:1.5;
                     ">
-                        <div style="font-weight:600; opacity:0.7; margin-bottom:6px;">
-                            {label}
+                        <div style="font-weight:700; opacity:0.9; margin-bottom:6px;">
+                            {title_line}
                         </div>
-            """,
+                """,
                 unsafe_allow_html=True
             )
     
-            # Renders Markdown properly (tables, bold, etc.)
+            # Render the full markdown message
             st.markdown(cleaned_msg)
     
             st.markdown(
