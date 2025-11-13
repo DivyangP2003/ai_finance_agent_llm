@@ -2015,29 +2015,22 @@ Guidelines:
     # -------------------------------------------------
     # User Input
     # -------------------------------------------------
-    user_input = st.text_input("Ask anything about markets, stocks or portfolio:", key="chat_input")
-    
-    # Send when user presses Enter or clicks Send button
-    send_pressed = st.button("Send")
-    
-    if (user_input and send_pressed) or (user_input and st.session_state.get("submitted") != user_input):
-        # Prevent double sending
-        st.session_state["submitted"] = user_input
-    
+    user_input = st.text_input("Ask anything about markets, stocks or portfolio:")
+
+    if st.button("Send") and user_input:
         # Add user message
         st.session_state["chat_history"].append(("user", user_input))
-    
+
         # Build prompt
         prompt = build_contextual_prompt(user_input)
-    
-        # Get AI response
+
+        # AI conversation
         ai_reply = AGENTS["TeamLeadAgent"].run(prompt).content
-    
-        # Add assistant response
+
+        # Add AI message
         st.session_state["chat_history"].append(("assistant", ai_reply))
-    
+
         st.rerun()
-    
 
 
 # --- Audit & Exports Tab ---
